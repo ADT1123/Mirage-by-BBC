@@ -1,4 +1,4 @@
-# Brow Wall
+# Mirage
 
 A live wallpaper that sits **behind your desktop icons** and that you can actually use:
 click sticky notes and type on them, tick to-dos, open a macOS-style Control Center from
@@ -178,9 +178,9 @@ offline.
 
 ## Settings
 
-Everything lives in one file, `~/.brow-wall/config.json`. The CLI, the editor and the
+Everything lives in one file, `~/.mirage/config.json`. The CLI, the editor and the
 tray all write to it, and the wallpaper reloads the moment it changes. Edit it by hand
-if you like. Logs go to `~/.brow-wall/app.log`.
+if you like. Logs go to `~/.mirage/app.log`.
 
 ## How it works
 

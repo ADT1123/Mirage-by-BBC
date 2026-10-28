@@ -1,0 +1,16 @@
+node_modules/
+*.log
+
+# testing only: theme snapshot renderer and its output
+scripts/snapshot.cjs
+snapshots/
+
+# debug captures and scratch files
+debug-*.png
+*.tmp
+scratch/
+
+# local secrets (the app keeps its API key in ~/.mirage/secrets.json, but just in case)
+.env
+.env.*
+secrets.json
