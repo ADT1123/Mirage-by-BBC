@@ -124,7 +124,7 @@ const clock = {
     </div>`,
   tick(el, w, ctx) {
     const now = ctx.now();
-    if ((w.variant || 'classic') === 'analog') {
+    if ((w.variant || 'classic') === 'analog' || w.shape === 'small') {
       const s = now.getSeconds();
       const m = now.getMinutes() + s / 60;
       const rot = (k, deg) => el.querySelector(`[data-k="${k}"]`)?.setAttribute('transform', `rotate(${deg.toFixed(2)})`);
@@ -444,11 +444,10 @@ const menubar = {
         ${menuLeft(ctx)}
       </div>
       <div class="mb-right">
+        ${ctx.store.update?.available ? '<span class="mb-item mb-update" data-act="update" title="A new version is ready">Update</span>' : ''}
         <span class="mb-item mb-np" data-act="player" data-k="np"></span>
-        <span class="mb-item" data-act="spotlight" title="Spotlight">${icon('search')}</span>
-        <span class="mb-item" data-act="settings-panel" title="Wallpaper settings">${icon('sliders')}</span>
-        <span class="mb-batt mb-item" data-act="control" data-k="batt"></span>
-        <span class="mb-wifi mb-item" data-act="control" data-k="net"></span>
+        <span class="mb-item" data-act="spotlight" title="Search">${icon('search')}</span>
+        <span class="mb-item mb-status mb-wifi" data-act="control" data-k="status" title="Control Center"></span>
         <span class="mb-item" data-act="calendar" data-k="when"></span>
       </div>
     </div>`,
@@ -457,26 +456,90 @@ const menubar = {
     const date = now.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
     const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: !ctx.cfg.clock24 });
     set(el, 'when', `${date}  ${time}`);
+    // one quiet status cluster (opens Control Center): Wi-Fi, then battery when there is one
     const b = ctx.store.battery;
-    set(el, 'batt', b ? `${Math.round(b.level * 100)}% ${batteryIcon(b.level, b.charging)}` : batteryIcon(1, true), true);
-    set(el, 'net', navigator.onLine ? icon('wifi') : `<span class="mb-off">offline</span>`, true);
+    set(el, 'status', `${navigator.onLine ? icon('wifi') : '<span class="mb-off">offline</span>'}${b ? batteryIcon(b.level, b.charging || b.plugged) : ''}`, true);
+    // music: a small moving equalizer while something plays; the song name is on hover
     const mm = ctx.store.media;
-    set(el, 'np', mm?.active && mm.title ? `${icon(mm.playing ? 'volume' : 'pause')}<span>${esc(mm.title)}${mm.artist ? ` — ${esc(mm.artist)}` : ''}</span>` : '', true);
+    const np = el.querySelector('[data-k="np"]');
+    if (np) np.title = mm?.active && mm.title ? `${mm.title}${mm.artist ? ` · ${mm.artist}` : ''}` : '';
+    set(el, 'np', mm?.active && mm.title ? `<span class="mb-eq${mm.playing ? ' on' : ''}"><i></i><i></i><i></i></span>` : '', true);
   },
 };
 
 // Left side of the menu bar: who you are, what you're working on, which theme is live.
+// the top bar's left side: just the project you're working on (a switcher)
 function menuLeft(ctx) {
-  const name = ctx.cfg.name || ctx.info.user || ctx.info.brand?.name || '';
-  const latest = ctx.store.git?.recent?.[0];
-  const repo = latest?.repo;
-  const theme = ctx.info.themes?.find((t) => t.id === ctx.cfg.theme)?.name;
-  return [
-    `<b class="mb-item" data-act="menu">${esc(name)}</b>`,
-    repo ? `<span class="mb-repo mb-item" data-act="repo" data-arg="${esc(latest.path || '')}">${icon('feed')}${esc(repo)}</span>` : '',
-    theme ? `<span class="mb-item" data-act="themes">${esc(theme)}</span>` : '',
-  ].join('');
+  const repo = ctx.store.git?.recent?.[0]?.repo;
+  return repo ? `<span class="mb-repo mb-item" data-act="projects" title="Your projects">${esc(repo)}${icon('chevron', 'mb-caret')}</span>` : '';
 }
+
+// ---------------------------------------------------------------- assistant
+
+const assistant = {
+  render(w, ctx) {
+    const first = String(ctx.cfg.name || ctx.info.user || '').split(' ')[0];
+    const chat = ctx.store.chat || [];
+    const lastA = [...chat].reverse().find((m) => m.role === 'assistant' && !m.error);
+    const lastQ = lastA ? chat[chat.indexOf(lastA) - 1] : null;
+    const chips = ['Plan my day', 'Sort my to-dos', 'Quick break idea'];
+    return `<div class="card assistant">
+      ${head('Assistant', 'Private AI')}
+      ${lastA ? `<div><p class="as-q">${esc(lastQ?.text || '')}</p><p class="as-a">${esc(lastA.text)}</p></div>` : `<p class="as-hi">Hi${first ? ` ${esc(first)}` : ''}, what's on your mind?</p>`}
+      <div class="as-chips">${chips.map((c) => `<button data-act="chat" data-arg="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+      <div class="as-input" data-act="chat">${icon('sparkle')}<span>Ask anything…</span></div>
+    </div>`;
+  },
+};
+
+// ---------------------------------------------------------------- stocks
+
+const INDEX_NAMES = { '^NSEI': 'NIFTY 50', '^BSESN': 'SENSEX', '^NSEBANK': 'BANK NIFTY', '^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^DJI': 'DOW' };
+const tidyName = (s) =>
+  INDEX_NAMES[s.symbol] ||
+  String(s.name || s.symbol)
+    .replace(/\b(LTD|LIMITED|INC|CORP|CORPORATION|CO|PLC|SERV|LT)\.?\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+function spark(points, prev, up) {
+  if (!points?.length) return '';
+  const lo = Math.min(...points, prev ?? Infinity);
+  const hi = Math.max(...points, prev ?? -Infinity);
+  const y = (v) => (18 - ((v - lo) / (hi - lo || 1)) * 16).toFixed(1);
+  const step = 60 / Math.max(1, points.length - 1);
+  const line = points.map((v, i) => `${(i * step).toFixed(1)},${y(v)}`).join(' ');
+  return `<svg class="stk-spark ${up ? 'up' : 'down'}" viewBox="0 0 60 20" preserveAspectRatio="none">${prev ? `<line x1="0" x2="60" y1="${y(prev)}" y2="${y(prev)}" />` : ''}<polyline points="${line}" /></svg>`;
+}
+
+const stocks = {
+  render(w, ctx) {
+    const want = (w.symbols || []).map((s) => s.toUpperCase());
+    const data = ctx.store.stocks;
+    const items = want.map((s) => data?.items?.find((i) => i.symbol === s)).filter(Boolean);
+    const time = data?.updated ? new Date(data.updated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+    let body;
+    if (!want.length) body = '<div class="empty">Add symbols in Edit widget</div>';
+    else if (!items.length) body = `<div class="empty">${data ? 'Prices unavailable offline' : 'Loading prices…'}</div>`;
+    else
+      body = items
+        .map((s) => {
+          if (s.error) return `<div class="stk-row"><span class="stk-n"><b>${esc(s.symbol)}</b><small>Not found</small></span></div>`;
+          const up = s.change >= 0;
+          const loc = s.currency === 'INR' ? 'en-IN' : 'en-US';
+          const price = s.price.toLocaleString(loc, { maximumFractionDigits: s.price < 10 ? 3 : 2, minimumFractionDigits: 2 });
+          return `<div class="stk-row" data-act="url" data-arg="https://finance.yahoo.com/quote/${encodeURIComponent(s.symbol)}">
+            <span class="stk-n"><b>${esc(tidyName(s))}</b><small>${esc(s.symbol.replace(/\.(NS|BO)$/, ''))}</small></span>
+            ${spark(s.points, s.prev, up)}
+            <span class="stk-p"><b>${price}</b><em class="${up ? 'up' : 'down'}">${up ? '+' : ''}${s.pct.toFixed(2)}%</em></span>
+          </div>`;
+        })
+        .join('');
+    return `<div class="card stocks">${head('Stocks', time)}<div class="stk-list">${body}</div></div>`;
+  },
+};
 
 // ---------------------------------------------------------------- art (daily darshan)
 const art = {
@@ -589,4 +652,134 @@ const stack = {
   },
 };
 
-export const WIDGETS = { clock, commits, feed, note, todo, weather, year, system, calendar, countdown, quote, menubar, art, verse, dock, music, stack };
+export const WIDGETS = { assistant, stocks, clock, commits, feed, note, todo, weather, year, system, calendar, countdown, quote, menubar, art, verse, dock, music, stack };
+
+// ---------------------------------------------------------------- Apple-style sizes
+// Small = a square tile, Medium = two squares wide. Each widget gets its own compact design.
+
+export const SHAPES = {
+  clock: ['small'],
+  calendar: ['small'],
+  weather: ['small', 'medium'],
+  stocks: ['small', 'medium'],
+  music: ['small', 'medium'],
+  assistant: ['medium'],
+  countdown: ['small'],
+  year: ['small'],
+};
+
+function sparkArea(points, up) {
+  if (!points?.length) return '';
+  const lo = Math.min(...points);
+  const hi = Math.max(...points);
+  const step = 100 / Math.max(1, points.length - 1);
+  const y = (v) => (38 - ((v - lo) / (hi - lo || 1)) * 34).toFixed(1);
+  const line = points.map((v, i) => `${(i * step).toFixed(1)},${y(v)}`).join(' ');
+  return `<svg class="sq-spark ${up ? 'up' : 'down'}" viewBox="0 0 100 40" preserveAspectRatio="none"><polygon points="0,40 ${line} 100,40"/><polyline points="${line}"/></svg>`;
+}
+
+const fmtPrice = (s) => s.price.toLocaleString(s.currency === 'INR' ? 'en-IN' : 'en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+
+export const SHAPED = {
+  clock: {
+    small: () => `<div class="card sq sq-clock">${analogFace()}</div>`,
+  },
+  calendar: {
+    small(w, ctx) {
+      const now = ctx.now();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      const first = new Date(y, m, 1).getDay();
+      const count = new Date(y, m + 1, 0).getDate();
+      let cells = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => `<b>${d}</b>`).join('');
+      for (let i = 0; i < first; i++) cells += '<span></span>';
+      for (let d = 1; d <= count; d++) cells += `<span${d === now.getDate() ? ' class="today"' : d < now.getDate() ? ' class="past"' : ''}>${d}</span>`;
+      return `<div class="card sq sq-cal"><div class="sq-month">${now.toLocaleDateString('en-US', { month: 'long' })}</div><div class="sq-grid">${cells}</div></div>`;
+    },
+  },
+  weather: {
+    small(w, ctx) {
+      const wx = ctx.store.weather;
+      if (!wx?.ok) return `<div class="card sq sq-wx"><small>Weather</small><b class="sq-big">--°</b><span class="sq-sub">${wx?.reason === 'offline' ? 'Offline' : 'Set your city'}</span></div>`;
+      return `<div class="card sq sq-wx" data-act="weather"><small>${esc(wx.city)}</small><b class="sq-big">${wx.temp}°</b><div class="sq-foot">${weatherIcon(wx.kind, wx.isDay)}<span>${esc(wx.label)}</span><span class="sq-dim">H ${wx.high}°  L ${wx.low}°</span></div></div>`;
+    },
+    medium(w, ctx) {
+      const wx = ctx.store.weather;
+      if (!wx?.ok) return SHAPED.weather.small(w, ctx).replace('card sq ', 'card sq-wide ');
+      return `<div class="card sq-wide sq-wx2" data-act="weather">
+        <div><small>${esc(wx.city)}</small><b class="sq-big">${wx.temp}°</b><span class="sq-dim">H ${wx.high}°  L ${wx.low}°</span></div>
+        <div class="sq-right">${weatherIcon(wx.kind, wx.isDay)}<b>${esc(wx.label)}</b><span class="sq-dim">Feels ${wx.feels}° · ${wx.humidity}% humidity</span></div>
+      </div>`;
+    },
+  },
+  stocks: {
+    small(w, ctx) {
+      const sym = (w.symbols || [])[0]?.toUpperCase();
+      const s = ctx.store.stocks?.items?.find((i) => i.symbol === sym);
+      if (!s || s.error) return `<div class="card sq sq-stk"><small>${esc(sym || 'Stocks')}</small><span class="sq-sub">${sym ? 'Loading…' : 'Add a symbol'}</span></div>`;
+      const up = s.change >= 0;
+      return `<div class="card sq sq-stk" data-act="url" data-arg="https://finance.yahoo.com/quote/${encodeURIComponent(s.symbol)}">
+        <div class="sq-stk-top"><b>${up ? '▲' : '▼'} ${esc(tidyName(s))}</b><em class="${up ? 'up' : 'down'}">${up ? '+' : ''}${s.pct.toFixed(2)}%</em></div>
+        ${sparkArea(s.points, up)}
+        <b class="sq-price">${fmtPrice(s)}</b>
+      </div>`;
+    },
+    medium(w, ctx) {
+      const items = (w.symbols || []).map((x) => ctx.store.stocks?.items?.find((i) => i.symbol === x.toUpperCase())).filter((s) => s && !s.error).slice(0, 3);
+      if (!items.length) return `<div class="card sq-wide sq-stk"><small>Stocks</small><span class="sq-sub">Loading…</span></div>`;
+      return `<div class="card sq-wide sq-stk2">${items
+        .map((s) => {
+          const up = s.change >= 0;
+          return `<div class="sq-stk-row" data-act="url" data-arg="https://finance.yahoo.com/quote/${encodeURIComponent(s.symbol)}"><b>${esc(tidyName(s))}</b>${sparkArea(s.points, up)}<span><b>${fmtPrice(s)}</b><em class="${up ? 'up' : 'down'}">${up ? '+' : ''}${s.pct.toFixed(2)}%</em></span></div>`;
+        })
+        .join('')}</div>`;
+    },
+  },
+  music: {
+    small(w, ctx) {
+      const m = ctx.store.media;
+      if (!m?.active) return `<div class="card sq sq-mu" data-act="player"><div class="sq-art">${icon('music')}</div><b>Not playing</b></div>`;
+      return `<div class="card sq sq-mu" data-act="player">
+        <div class="sq-art"${m.art ? ` style="background-image:url('${esc(m.art)}')"` : ''}>${m.art ? '' : icon('music')}<button data-act="media" data-arg="toggle" class="sq-play" data-k="mu-play"></button></div>
+        <b>${esc(m.title || 'Unknown')}</b><span class="sq-dim">${esc(m.artist || '')}</span>
+      </div>`;
+    },
+    medium(w, ctx) {
+      const m = ctx.store.media;
+      if (!m?.active) return `<div class="card sq-wide sq-mu2" data-act="player"><div class="sq-art">${icon('music')}</div><div class="sq-mu-meta"><b>Not playing</b><span class="sq-dim">Play something to see it here</span></div></div>`;
+      return `<div class="card sq-wide sq-mu2" data-act="player">
+        <div class="sq-art"${m.art ? ` style="background-image:url('${esc(m.art)}')"` : ''}>${m.art ? '' : icon('music')}</div>
+        <div class="sq-mu-meta">
+          <b>${esc(m.title || 'Unknown')}</b><span class="sq-dim">${esc(m.artist || '')}</span>
+          <div class="mu-bar"><i data-k="mu-fill"></i></div>
+          <div class="mu-ctrl"><button data-act="media" data-arg="prev">${icon('prev')}</button><button data-act="media" data-arg="toggle" class="mu-play" data-k="mu-play"></button><button data-act="media" data-arg="next">${icon('next')}</button></div>
+        </div>
+      </div>`;
+    },
+  },
+  assistant: {
+    medium: () => `<div class="card sq-wide sq-ai">
+      <div class="sq-ask" data-act="chat">${icon('sparkle')}<span>Ask anything</span></div>
+      <div class="sq-ai-btns">
+        <button data-act="chat" data-arg="Plan my day" title="Plan my day">${icon('calendar')}</button>
+        <button data-act="chat" data-arg="Sort my to-dos by urgency" title="Sort my to-dos">${icon('todo')}</button>
+        <button data-act="chat" data-arg="Add a note: " title="Quick note">${icon('note')}</button>
+        <button data-act="chat" data-arg="Give me a 5-minute break idea" title="Break idea">${icon('leaf')}</button>
+      </div>
+    </div>`,
+  },
+  countdown: {
+    small(w, ctx) {
+      const t = target(w);
+      const days = Math.max(0, Math.ceil((t.getTime() - ctx.now().getTime()) / DAY));
+      return `<div class="card sq sq-cd"><small>${esc(w.title || 'Countdown')}</small><b class="sq-big">${days}</b><span class="sq-dim">${days === 1 ? 'day' : 'days'} · ${t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></div>`;
+    },
+  },
+  year: {
+    small(w, ctx) {
+      const { y, frac } = yearFrac(ctx.now());
+      const c = 2 * Math.PI * 40;
+      return `<div class="card sq sq-year"><svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="40"/><circle class="ring-fg" cx="50" cy="50" r="40" stroke-dasharray="${(c * frac).toFixed(1)} ${c.toFixed(1)}"/></svg><div><b>${Math.floor(frac * 100)}%</b><span class="sq-dim">of ${y}</span></div></div>`;
+    },
+  },
+};

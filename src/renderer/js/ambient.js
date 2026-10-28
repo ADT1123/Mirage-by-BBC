@@ -1,8 +1,9 @@
 // Things that live on the wallpaper itself rather than in a widget:
 //  - real weather: rain, snow or a storm falling over any theme when it's happening outside
+//  - the season: cherry petals, summer light, falling leaves or snow (picked, or from the calendar)
 //  - a desktop pet that strolls along the dock and reacts when you click it
 
-let layer; // behind the widgets: the weather canvas
+let layer; // behind the widgets: season tint + season canvas + weather canvas
 let stage;
 let fx = null;
 let pet = null;
@@ -11,15 +12,16 @@ export function mountAmbient(stageEl) {
   stage = stageEl;
   layer = document.createElement('div');
   layer.id = 'ambient';
-  layer.innerHTML = '<canvas class="fx"></canvas>';
+  layer.innerHTML = '<div class="season-tint"></div><canvas class="season"></canvas><canvas class="fx"></canvas>';
   stageEl.before(layer);
 }
 
 // called on every render / data change
 export function updateAmbient(c) {
   if (!layer) return;
-  const motion = c.cfg.motion !== false;
+  const motion = c.cfg.motion !== false && document.documentElement.dataset.perf !== 'saver';
   updateWeather(c, motion);
+  updateSeason(c, motion);
   updatePet(c, motion);
 }
 
@@ -101,6 +103,130 @@ function startFx(cv, kind) {
           flash -= dt * 3.2;
         }
       }
+    }
+    g.globalAlpha = 1;
+    raf = requestAnimationFrame(frame);
+  };
+  raf = requestAnimationFrame(frame);
+  return {
+    kind,
+    stop() {
+      cancelAnimationFrame(raf);
+      removeEventListener('resize', size);
+    },
+  };
+}
+
+// ------------------------------------------------------------------ seasons
+
+// 'auto' follows the calendar (northern hemisphere): Mar-May spring, Jun-Aug summer, Sep-Nov autumn
+export function seasonFor(setting, now = new Date()) {
+  if (setting && setting !== 'auto') return setting === 'off' ? null : setting;
+  const m = now.getMonth();
+  return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter';
+}
+
+let season = null;
+function updateSeason(c, motion) {
+  const kind = seasonFor(c.cfg.season ?? 'off');
+  const tint = layer.querySelector('.season-tint');
+  tint.dataset.s = kind || '';
+  const want = motion && kind ? kind : null;
+  if (season?.kind === want) return;
+  season?.stop();
+  season = want ? startSeason(layer.querySelector('.season'), want) : null;
+  if (!want) {
+    const cv = layer.querySelector('.season');
+    cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  }
+}
+
+const LEAVES = ['#d9622b', '#e8a33d', '#b5432a', '#c98a2e', '#a8551f'];
+const PETALS = ['#f7b6c8', '#f4c6d4', '#ffd9e3', '#f29bb5'];
+
+function startSeason(cv, kind) {
+  const g = cv.getContext('2d');
+  let W = 0;
+  let H = 0;
+  const size = () => {
+    W = cv.width = innerWidth;
+    H = cv.height = innerHeight;
+  };
+  size();
+  addEventListener('resize', size);
+  const u = () => H / 67.5; // one "rem"
+  const n = { spring: 34, summer: 40, autumn: 26, winter: 90 }[kind];
+  const make = (fresh) => ({
+    x: Math.random() * W,
+    y: fresh ? (kind === 'summer' ? H + 10 : -20) : Math.random() * H,
+    z: 0.5 + Math.random() * 0.5,
+    r: Math.random() * 6.28,
+    vr: (Math.random() - 0.5) * 2,
+    p: Math.random() * 6.28,
+    c: (kind === 'autumn' ? LEAVES : PETALS)[Math.floor(Math.random() * 5) % (kind === 'autumn' ? LEAVES.length : PETALS.length)],
+  });
+  const parts = Array.from({ length: n }, () => make(false));
+  let raf = 0;
+  let last = performance.now();
+  const frame = (t) => {
+    const dt = Math.min(0.05, (t - last) / 1000);
+    last = t;
+    g.clearRect(0, 0, W, H);
+    const s = u();
+    for (let i = 0; i < parts.length; i++) {
+      const q = parts[i];
+      if (kind === 'summer') {
+        // warm motes drifting up, softly twinkling
+        q.y -= (8 + 14 * q.z) * dt;
+        q.x += Math.sin(t / 2200 + q.p) * 10 * dt;
+        if (q.y < -10) parts[i] = make(true);
+        g.globalAlpha = (0.25 + 0.45 * q.z) * (0.6 + 0.4 * Math.sin(t / 700 + q.p));
+        g.fillStyle = 'rgba(255, 214, 140, 1)';
+        g.beginPath();
+        g.arc(q.x, q.y, 0.08 * s + q.z * 0.12 * s, 0, 6.28);
+        g.fill();
+        continue;
+      }
+      if (kind === 'winter') {
+        q.y += (18 + 26 * q.z) * dt;
+        q.x += Math.sin(t / 1800 + q.p) * 12 * dt;
+        if (q.y > H + 6) parts[i] = make(true);
+        g.globalAlpha = 0.3 + q.z * 0.5;
+        g.fillStyle = '#fff';
+        g.beginPath();
+        g.arc(q.x, q.y, 0.04 * s + q.z * 0.1 * s, 0, 6.28);
+        g.fill();
+        continue;
+      }
+      // spring petals and autumn leaves: fall, sway, tumble
+      q.y += (kind === 'autumn' ? 34 : 24) * (0.6 + q.z) * dt;
+      q.x += (Math.sin(t / 1300 + q.p) * 28 + 10) * dt;
+      q.r += q.vr * dt;
+      if (q.y > H + 30 || q.x > W + 30) parts[i] = make(true);
+      const size = (kind === 'autumn' ? 0.55 : 0.32) * s * (0.7 + q.z * 0.6);
+      g.save();
+      g.translate(q.x, q.y);
+      g.rotate(q.r);
+      g.scale(Math.cos(t / 600 + q.p), 1); // the flutter: turning edge-on and back
+      g.globalAlpha = 0.55 + q.z * 0.4;
+      g.fillStyle = q.c;
+      g.beginPath();
+      if (kind === 'autumn') {
+        g.moveTo(0, -size);
+        g.quadraticCurveTo(size * 0.95, -size * 0.25, 0, size);
+        g.quadraticCurveTo(-size * 0.95, -size * 0.25, 0, -size);
+        g.fill();
+        g.strokeStyle = 'rgba(70, 30, 10, 0.35)';
+        g.lineWidth = Math.max(0.6, size * 0.06);
+        g.beginPath();
+        g.moveTo(0, -size * 0.8);
+        g.lineTo(0, size * 1.25);
+        g.stroke();
+      } else {
+        g.ellipse(0, 0, size, size * 0.62, 0, 0, 6.28);
+        g.fill();
+      }
+      g.restore();
     }
     g.globalAlpha = 1;
     raf = requestAnimationFrame(frame);

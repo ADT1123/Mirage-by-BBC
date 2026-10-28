@@ -1,13 +1,15 @@
-import { WIDGETS } from './widgets.js';
+import { WIDGETS, SHAPED } from './widgets.js';
 import { mountScene } from './scenes.js';
 import { demoStore } from './demo.js';
-import { TINTS } from './widgetform.js';
+import { TINTS, FONTS } from './widgetform.js';
 import { mountAmbient, updateAmbient } from './ambient.js';
 
 const q = new URLSearchParams(location.search);
 const MODE = q.get('mode') || 'wallpaper'; // wallpaper | edit
 const PRIMARY = q.get('primary') !== '0';
 const DEMO = q.has('demo');
+// Linux: room for the desktop's own top panel above our menu bar
+document.documentElement.style.setProperty('--inset-top', `${Number(q.get('inset')) || 0}px`);
 const AMBIENT = PRIMARY && !DEMO && (MODE === 'wallpaper' || MODE === 'edit');
 
 const root = document.documentElement;
@@ -15,6 +17,34 @@ const stage = document.getElementById('stage');
 const sceneEl = document.getElementById('scene');
 const backdrop = document.getElementById('backdrop');
 const chrome = document.getElementById('chrome');
+
+// While a maximized app hides the wallpaper (or the PC is locked) nothing needs to move:
+// animation frames are held back and CSS animations pause, so the wallpaper costs ~nothing.
+let hidden = false;
+const rawRaf = window.requestAnimationFrame.bind(window);
+let heldFrames = [];
+window.requestAnimationFrame = (cb) => (hidden ? (heldFrames.push(cb), 0) : rawRaf(cb));
+function setHidden(h) {
+  if (hidden === h) return;
+  hidden = h;
+  document.documentElement.toggleAttribute('data-paused', h);
+  if (!h) {
+    const q = heldFrames;
+    heldFrames = [];
+    q.forEach((cb) => rawRaf(cb));
+    tick();
+    render();
+  }
+}
+
+// Performance: 'auto' saves power on battery and on modest laptops (fewer cores / less memory)
+const weakDevice = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
+function applyPerf() {
+  const mode = cfg?.perf || 'auto';
+  const onBattery = store.battery && !store.battery.plugged;
+  const saver = mode === 'saver' || (mode === 'auto' && (weakDevice || onBattery));
+  root.dataset.perf = saver ? 'saver' : 'full';
+}
 
 const store = { git: null, weather: null, system: null, battery: null, quote: null, verse: null, art: null, dock: null, media: null };
 const recs = new Map(); // widget id -> { el, key }
@@ -49,6 +79,7 @@ async function applyLook() {
   root.dataset.theme = theme();
   applyAppearance();
   root.dataset.motion = cfg.motion === false ? 'off' : 'on';
+  applyPerf();
   root.dataset.mode = MODE;
 
   if (cfg.background !== bgPath) {
@@ -58,6 +89,11 @@ async function applyLook() {
     root.dataset.bg = url ? 'image' : 'scene';
   }
   backdrop.style.setProperty('--dim', String(cfg.dim ?? 0.25));
+  // your own accent color for the whole theme (Settings), including the commit graph
+  const acc = TINTS[cfg.accent];
+  for (const [k, v] of Object.entries({ '--accent': acc, '--heat-1': acc && `color-mix(in srgb, ${acc} 28%, transparent)`, '--heat-2': acc && `color-mix(in srgb, ${acc} 50%, transparent)`, '--heat-3': acc && `color-mix(in srgb, ${acc} 75%, transparent)`, '--heat-4': acc }))
+    if (v) root.style.setProperty(k, v);
+    else root.style.removeProperty(k);
 
   const key = `${theme()}|${root.dataset.bg}|${root.dataset.appearance}|${cfg.planet || ''}`;
   if (key !== sceneKey) {
@@ -74,12 +110,14 @@ async function applyLook() {
 
 function keyFor(w) {
   let k = `${JSON.stringify(w)}|${theme()}`;
-  if (w.type === 'clock' || w.type === 'menubar') k += `|${cfg.name}|${cfg.clock24}|${info.user}|${store.git?.updated ?? ''}`;
+  if (w.type === 'clock' || w.type === 'menubar') k += `|${cfg.name}|${cfg.clock24}|${info.user}|${store.git?.updated ?? ''}|${!!store.update?.available}`;
+  if (w.type === 'assistant') k += `|${store.chat?.length ?? 0}|${cfg.name}`;
   if (w.type === 'quote') k += `|${store.quote?.text ?? ''}`;
   if (w.type === 'stack') k += `|${stackIdx.get(w.id) || 0}|${store.media?.key ?? ''}|${store.media?.art ?? ''}|${store.weather?.updated ?? ''}|${store.git?.updated ?? ''}|${new Date().toDateString()}`;
   if (w.type === 'music') k += `|${store.media?.key ?? ''}|${store.media?.art ?? ''}|${!!store.media?.active}`;
   if (w.type === 'dock') k += `|${store.dock?.map((a) => a.target + !!a.icon).join() ?? ''}`;
   if (w.type === 'art') k += `|${store.art?.id ?? ''}|${store.artTried ?? ''}`;
+  if (w.type === 'stocks') k += `|${store.stocks?.updated ?? ''}`;
   if (w.type === 'verse') k += `|${store.verse?.ref ?? ''}|${store.verseTried ?? ''}`;
   if (w.type === 'commits' || w.type === 'feed') k += `|${store.git?.updated ?? 'none'}`;
   if (w.type === 'weather') k += `|${store.weather?.updated ?? store.weather?.reason ?? 'none'}`;
@@ -110,7 +148,8 @@ function render(opts = {}) {
     if (rec.key === key) continue;
     rec.key = key;
     if (opts.skip === w.id) continue; // the editor is typing in this one; don't clobber the caret
-    rec.el.innerHTML = impl.render(w, c);
+    const shaped = w.shape && SHAPED[w.type]?.[w.shape]; // Apple-style Small / Medium tile
+    rec.el.innerHTML = shaped ? shaped(w, c) : impl.render(w, c);
     impl.tick?.(rec.el, w, c);
     editor?.decorate(rec.el, w);
     // live wallpaper: a quiet ••• on hover opens Edit Widget
@@ -154,6 +193,8 @@ function place(el, w) {
   if (w.width) el.style.setProperty('--w', `${w.width}rem`);
   // per-widget look (Edit Widget): style, tint, accent, corners, opacity, shadow
   el.dataset.style = w.style || 'theme';
+  if (w.shape) el.dataset.shape = w.shape;
+  else delete el.dataset.shape;
   el.dataset.tint = w.tint || 'graphite';
   el.style.setProperty('--wt', TINTS[w.tint] || TINTS.graphite);
   el.style.setProperty('--wo', String(w.opacity ?? 1));
@@ -163,9 +204,32 @@ function place(el, w) {
   if (w.corners) el.dataset.corners = w.corners;
   else delete el.dataset.corners;
   el.classList.toggle('no-shadow', w.shadow === false);
+  // text color (Edit Widget)
+  const tc = TINTS[w.textColor];
+  for (const [k, v] of Object.entries({ '--fg': tc, '--fg-2': tc && `color-mix(in srgb, ${tc} 68%, transparent)`, '--fg-3': tc && `color-mix(in srgb, ${tc} 44%, transparent)` }))
+    if (v) el.style.setProperty(k, v);
+    else el.style.removeProperty(k);
+  // font and weight (Edit Widget), like the lock-screen clock picker
+  const font = FONTS[w.font];
+  if (font) {
+    el.dataset.font = w.font;
+    el.style.setProperty('--wf', font.family);
+  } else {
+    delete el.dataset.font;
+    el.style.removeProperty('--wf');
+  }
+  if (w.weight && (!font || font.weights)) {
+    el.dataset.weight = '';
+    el.style.setProperty('--ww', String(w.weight));
+  } else {
+    delete el.dataset.weight;
+    el.style.removeProperty('--ww');
+  }
 }
 
 function tick() {
+  if (hidden) return;
+  applyPerf();
   // advance Smart Stacks on their own clock (paused while the pointer is over them)
   const now = Date.now();
   let turned = false;
@@ -182,6 +246,8 @@ function tick() {
     }
   }
   if (turned) render();
+  // rotating quote / verse: fetch the next one when its slot changes
+  if (PRIMARY && ((has('quote') && slotKey('quote') !== rotated.quote) || (has('verse') && slotKey('verse') !== rotated.verse))) pollDaily();
   const c = ctx();
   for (const w of PRIMARY ? cfg.widgets : []) {
     const rec = recs.get(w.id);
@@ -207,13 +273,31 @@ async function pollWeather(force = false) {
   store.weather = await window.wall.weather(force);
   render();
   scene?.update(ctx());
+  // a failed fetch (network still waking up, a hiccup) tries again soon instead of in 15 minutes
+  clearTimeout(weatherRetry);
+  if (store.weather?.reason === 'offline') {
+    weatherDelay = Math.min(300000, (weatherDelay || 10000) * 2);
+    weatherRetry = setTimeout(() => pollWeather(true), weatherDelay);
+  } else weatherDelay = 0;
 }
+let weatherRetry = 0;
+let weatherDelay = 0;
 
 // Daily content (quote, Gita verse, painting) is real even in demo previews.
+// how often quotes / verses change (from the first widget of that type)
+const everyFor = (type) => cfg.widgets.find((w) => w.type === type)?.rotate || 'day';
+const PERIOD = { hour: 3600e3, '30m': 1800e3, '15m': 900e3, '5m': 300e3, '1m': 60e3 };
+const slotKey = (type) => {
+  const e = everyFor(type);
+  return `${e}:${PERIOD[e] ? Math.floor(Date.now() / PERIOD[e]) : new Date().toDateString()}`;
+};
+let rotated = { quote: '', verse: '' };
+
 async function pollDaily() {
   const jobs = [];
-  if (has('quote')) jobs.push(window.wall.quote().then((v) => (store.quote = v)));
-  if (has('verse')) jobs.push(window.wall.verse().then((v) => ((store.verse = v), (store.verseTried = true))));
+  rotated = { quote: slotKey('quote'), verse: slotKey('verse') };
+  if (has('quote')) jobs.push(window.wall.quote(everyFor('quote')).then((v) => (store.quote = v)));
+  if (has('verse')) jobs.push(window.wall.verse(everyFor('verse')).then((v) => ((store.verse = v), (store.verseTried = true))));
   if (has('art')) jobs.push(window.wall.art().then((v) => ((store.art = v), (store.artTried = true))));
   if (!jobs.length) return;
   await Promise.allSettled(jobs);
@@ -230,6 +314,16 @@ async function pollDock() {
   render();
 }
 
+// one request for every symbol on any Stocks widget
+let stocksKey = '';
+async function pollStocks() {
+  if (!has('stocks')) return;
+  const symbols = [...new Set(cfg.widgets.filter((w) => w.type === 'stocks').flatMap((w) => w.symbols || []))];
+  stocksKey = symbols.join();
+  store.stocks = await window.wall.stocks(symbols);
+  render();
+}
+
 async function pollSystem() {
   if (DEMO || !has('system')) return;
   store.system = await window.wall.system();
@@ -239,15 +333,20 @@ async function pollSystem() {
 async function watchBattery() {
   if (DEMO) return;
   try {
-    const b = await navigator.getBattery();
-    const upd = () => {
-      // Desktops without a battery report "full and charging" forever; show them as AC power.
-      const noBattery = b.level === 1 && b.charging && b.chargingTime === 0;
-      store.battery = noBattery ? null : { level: b.level, charging: b.charging };
+    // Windows knows for sure whether there's a battery and whether it's plugged in
+    const upd = async () => {
+      const p = await window.wall.power?.();
+      if (p) store.battery = p.hasBattery ? { level: p.level ?? 1, charging: p.charging, plugged: p.ac } : null;
+      else {
+        const b = await navigator.getBattery();
+        store.battery = { level: b.level, charging: b.charging, plugged: b.charging };
+      }
       tick();
     };
-    b.addEventListener('levelchange', upd);
-    b.addEventListener('chargingchange', upd);
+    const b = await navigator.getBattery().catch(() => null);
+    b?.addEventListener('levelchange', upd);
+    b?.addEventListener('chargingchange', upd); // plug / unplug shows up right away
+    setInterval(upd, 15000);
     upd();
   } catch {}
 }
@@ -290,6 +389,8 @@ function onConfigSideEffects() {
     dockKey = JSON.stringify(cfg.dock ?? null);
     pollDock();
   }
+  const sk = [...new Set(cfg.widgets.filter((w) => w.type === 'stocks').flatMap((w) => w.symbols || []))].join();
+  if (has('stocks') && sk !== stocksKey) pollStocks();
   if ((has('quote') && !store.quote) || (has('verse') && !store.verse) || (has('art') && !store.art)) pollDaily();
 }
 
@@ -326,6 +427,11 @@ async function boot() {
   if (MODE === 'popup' || MODE === 'spotlight' || MODE === 'player') {
     root.dataset.theme = theme();
     applyAppearance();
+    window.wall.onConfig((next) => {
+      cfg = next;
+      root.dataset.theme = theme();
+      applyAppearance();
+    });
     const mod = await import({ popup: './popup.js', spotlight: './spotlight.js', player: './player.js' }[MODE]);
     mod.start({ cfg, info, params: q });
     document.fonts.ready.then(() => root.classList.add('ready'));
@@ -333,6 +439,7 @@ async function boot() {
   }
   if (AMBIENT) mountAmbient(stage);
   if (MODE === 'wallpaper' && PRIMARY && !DEMO) (await import('./live.js')).enableLive(app);
+  window.wall.onHidden?.(setHidden);
   if (DEMO) Object.assign(store, demoStore());
   weatherKey = cfg.city ? `${cfg.city.lat},${cfg.city.lon}` : '';
 
@@ -365,6 +472,7 @@ async function boot() {
   setInterval(() => pollGit(true), 10 * 60 * 1000);
   setInterval(() => pollWeather(true), 15 * 60 * 1000);
   setInterval(pollDaily, 30 * 60 * 1000);
+  setInterval(pollStocks, 60 * 1000);
   window.addEventListener('online', () => {
     pollWeather(true);
     pollDaily();
@@ -375,10 +483,26 @@ async function boot() {
   pollGit();
   pollWeather();
   pollDaily();
+  pollStocks();
   pollSystem();
   dockKey = JSON.stringify(cfg.dock ?? null);
   pollDock();
   watchBattery();
+  // a new version on GitHub shows as a small "Update" in the menu bar
+  if (MODE === 'wallpaper' && PRIMARY && !DEMO && window.wall.updateStatus) {
+    window.wall.updateStatus().then((s) => ((store.update = s), render()));
+    window.wall.onUpdate((s) => ((store.update = s), render()));
+  }
+  // the Assistant widget previews the latest answer
+  const pollChat = () => has('assistant') && window.wall.chatHistory?.().then((h) => {
+    if ((h?.length ?? 0) !== (store.chat?.length ?? 0)) {
+      store.chat = h;
+      render();
+    }
+  });
+  pollChat();
+  setInterval(pollChat, 4000);
+
   if (window.wall.media) {
     window.wall.media().then((s) => {
       store.media = s;

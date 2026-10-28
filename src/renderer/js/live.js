@@ -12,10 +12,17 @@ export function enableLive(app) {
     target?.click();
   });
 
+  // website links light up only while Ctrl is held
+  const ctrlHeld = (on) => document.body.classList.toggle('ctrl-held', on);
+  document.addEventListener('mousemove', (e) => ctrlHeld(e.ctrlKey));
+  document.addEventListener('mouseleave', () => ctrlHeld(false));
+
   app.stage.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act]');
     if (!t) return;
     const el = t.closest('.w');
+    // links that leave for a website need Ctrl+click, so a stray click never opens the browser
+    if (['url', 'github'].includes(t.dataset.act) && !e.ctrlKey) return;
     const id = el?.dataset.id;
     const act = t.dataset.act;
     const arg = t.dataset.arg;
@@ -39,6 +46,8 @@ export function enableLive(app) {
       case 'control':
       case 'calendar':
         return window.wall.popup(act, { y: Math.round(r.bottom + 6) });
+      case 'projects':
+        return window.wall.popup('projects', { x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
       case 'menu':
       case 'themes':
         return window.wall.popup('menu', { id: act === 'themes' ? 'themes' : '', x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
@@ -60,6 +69,12 @@ export function enableLive(app) {
         return window.wall.mediaCmd(arg);
       case 'player':
         return window.wall.openPlayer();
+      case 'chat': {
+        const box = (el?.querySelector('.card') || el || t).getBoundingClientRect();
+        const right = box.right + 12;
+        const x = right + 380 < innerWidth ? right : Math.max(8, box.x - 392);
+        return window.wall.popup('chat', { id: arg || '', x: Math.round(x), y: Math.round(Math.max(36, Math.min(box.y, innerHeight - 560))) });
+      }
       case 'pet':
         return pokePet();
       case 'github':

@@ -136,4 +136,20 @@ function refreshDesktop() {
   } catch {}
 }
 
-module.exports = { attach, isAttached, refreshDesktop, findDesktopHost, hwndOf };
+// Other wallpaper apps (Wallpaper Engine, Lively…) put their windows in the same place.
+// Re-assert our spot every few seconds so Mirage stays on top of them, just under the icons.
+function raise(info) {
+  if (os.platform() !== 'win32' || !info?.hwnd) return;
+  try {
+    const w = load();
+    const flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+    if (info.mode === 'raised') {
+      const defView = w.FindWindowExW(info.parent, 0, 'SHELLDLL_DefView', null);
+      if (defView) w.SetWindowPos(info.hwnd, defView, 0, 0, 0, 0, flags);
+    } else {
+      w.SetWindowPos(info.hwnd, 0 /* HWND_TOP among the desktop's children */, 0, 0, 0, 0, flags);
+    }
+  } catch {}
+}
+
+module.exports = { attach, isAttached, raise, refreshDesktop, findDesktopHost, hwndOf };

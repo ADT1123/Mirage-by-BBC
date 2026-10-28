@@ -1,0 +1,28 @@
+# Runs on every pull request: syntax-checks all code and looks for known-vulnerable dependencies.
+# Read-only and secret-free, so it's safe to run on pull requests from forks.
+name: check
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install (no install scripts)
+        run: npm ci --ignore-scripts
+      - name: Syntax check
+        run: |
+          set -e
+          for f in $(git ls-files 'src/**/*.cjs' 'cli/*.mjs' 'scripts/*.cjs'); do node --check "$f"; done
+          for f in $(git ls-files 'src/renderer/js/*.js'); do cp "$f" /tmp/check.mjs; node --check /tmp/check.mjs; done
+      - name: Known vulnerabilities
+        run: npm audit --omit=dev --audit-level=high

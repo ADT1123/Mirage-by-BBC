@@ -948,3 +948,18 @@
 [data-theme='terminal'] .menubar { border-bottom-color: var(--card-border); }
 [data-theme='blast'] .menubar { font-family: var(--font-display); letter-spacing: 0.06em; font-size: 1rem; backdrop-filter: none; }
 [data-theme='paper'] .menubar, [data-theme='zen'] .menubar { border-bottom-color: var(--hair); }
+
+/* shooting stars: a bright head with a fading tail, now and then */
+.sc-midnight .shoot {
+  position: absolute; left: var(--x); top: var(--y); width: 18vh; height: 0.18vh; border-radius: 1vh; opacity: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 236, 214, 0.95));
+  transform-origin: right center; animation: mn-shoot var(--t) ease-in var(--d) infinite;
+}
+.sc-midnight .shoot::after { content: ''; position: absolute; right: -0.2vh; top: -0.2vh; width: 0.55vh; height: 0.55vh; border-radius: 50%; background: #fff; box-shadow: 0 0 1.2vh 0.3vh rgba(255, 220, 190, 0.8); }
+@keyframes mn-shoot {
+  0% { opacity: 0; transform: rotate(32deg) translateX(0); }
+  2% { opacity: 1; }
+  8% { opacity: 0; transform: rotate(32deg) translateX(46vh); }
+  100% { opacity: 0; transform: rotate(32deg) translateX(46vh); }
+}
+[data-appearance='light'] .sc-midnight .shoot { display: none; }

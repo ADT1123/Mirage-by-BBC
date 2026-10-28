@@ -67,32 +67,62 @@ function daily(key, loader) {
   return inflight[key];
 }
 
+// ---------------------------------------------------------------- rotation
+// "every" = how often a widget shows something new: day | hour | 30m | 15m | 5m | 1m
+const PERIOD = { hour: 3600e3, '30m': 1800e3, '15m': 900e3, '5m': 300e3, '1m': 60e3 };
+
+// which slot we're in right now; the same slot always gives the same pick
+function slot(every) {
+  return PERIOD[every] ? Math.floor(Date.now() / PERIOD[every]) : dayIndex();
+}
+
 // ---------------------------------------------------------------- quote
 
-function quote() {
-  return daily('quote', async () => {
-    const [q] = await fetchJson('https://zenquotes.io/api/today');
-    return q?.q ? { text: q.q.trim(), author: (q.a || '').trim() } : null;
+// a day's pool of ~50 quotes, rotated through by slot
+function quotePool() {
+  return daily('quotes', async () => {
+    const list = await fetchJson('https://zenquotes.io/api/quotes');
+    const pool = (Array.isArray(list) ? list : []).filter((q) => q?.q && !/too many requests/i.test(q.q)).map((q) => ({ text: q.q.trim(), author: (q.a || '').trim() }));
+    return pool.length ? pool : null;
   });
+}
+
+async function quote(every = 'day') {
+  const pool = await quotePool();
+  if (!pool?.length) return null;
+  return { ...pool[slot(every) % pool.length], slot: `${every}:${slot(every)}` };
 }
 
 // ---------------------------------------------------------------- gita
 
 const VERSES = [47, 72, 43, 42, 29, 47, 30, 28, 34, 42, 55, 20, 35, 27, 20, 24, 28, 78];
 
-function verse() {
-  return daily('verse', async () => {
-    let n = dayIndex() % VERSES.reduce((a, b) => a + b, 0);
-    let ch = 0;
-    while (n >= VERSES[ch]) n -= VERSES[ch++];
+// walks through all 700 verses in order, one per slot; each verse is cached once fetched
+const verseCache = new Map();
+async function verse(every = 'day') {
+  const s = slot(every);
+  let n = s % VERSES.reduce((a, b) => a + b, 0);
+  let ch = 0;
+  while (n >= VERSES[ch]) n -= VERSES[ch++];
+  const key = `${ch + 1}.${n + 1}`;
+  if (verseCache.has(key)) return verseCache.get(key);
+  const stored = readCache()[`verse:${key}`];
+  if (stored) return verseCache.set(key, stored).get(key);
+  try {
     const d = await fetchJson(`https://vedicscriptures.github.io/slok/${ch + 1}/${n + 1}/`);
     const english = d.siva?.et || d.purohit?.et || d.prabhu?.et || '';
-    return {
+    const v = {
       ref: `${d.chapter}.${d.verse}`,
       sanskrit: String(d.slok || '').replace(/\|\|[^|]*\|\|/g, '॥').replace(/\|/g, '।').trim(),
       english: english.replace(/^\s*\d+\.\d+\s*/, '').trim(),
     };
-  });
+    writeCache(`verse:${key}`, v);
+    writeCache('verse-last', v);
+    verseCache.set(key, v);
+    return v;
+  } catch {
+    return readCache()['verse-last'] || null; // offline: keep showing the last one
+  }
 }
 
 // ---------------------------------------------------------------- art

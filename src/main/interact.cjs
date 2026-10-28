@@ -10,10 +10,12 @@ const path = require('path');
 const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const native = require('./native.cjs');
 const system = require('./system.cjs');
+const git = require('./git.cjs');
+const linux = process.platform === 'linux' ? require('./linux.cjs') : null;
 const config = require('../shared/config.cjs');
 
 const PAGE = path.join(__dirname, '..', 'renderer', 'index.html');
-const SIZES = { control: [380, 560], calendar: [330, 380], menu: [320, 440], settings: [380, 680], widget: [360, 640], weather: [440, 640], wrapped: [400, 760] };
+const SIZES = { control: [380, 560], calendar: [330, 380], menu: [320, 440], settings: [380, 680], widget: [360, 640], weather: [440, 640], projects: [340, 480], wrapped: [400, 760], update: [360, 300], chat: [380, 560] };
 
 let hooks = null;
 const t0 = Date.now();
@@ -25,24 +27,29 @@ let popupShownAt = 0;
 
 function startForwarding() {
   if (process.platform !== 'win32') return; // other platforms deliver input natively
-  let last = { x: -1, y: -1, down: false, over: false, wc: null };
+  let last = { x: -1, y: -1, down: false, over: false, ctrl: false, wc: null };
   let pressed = false;
-  setInterval(() => {
-    if (hooks.editorOpen()) return;
+  const loop = () => setTimeout(() => {
+    const busy = step();
+    loop.delay = busy ? 16 : 60; // over an app window we only need to notice coming back
+    loop();
+  }, loop.delay || 16);
+  const step = () => {
+    if (hooks.editorOpen()) return false;
     let p;
     try {
       p = native.pointer();
     } catch {
-      return;
+      return false;
     }
     const dip = screen.screenToDipPoint({ x: p.x, y: p.y });
     const display = screen.getDisplayNearestPoint(dip);
     const entry = hooks.wallpapers().find((w) => w.displayId === display.id && !w.win.isDestroyed());
-    if (!entry) return;
+    if (!entry) return false;
     const wc = entry.win.webContents;
     const x = Math.round(dip.x - display.bounds.x);
     const y = Math.round(dip.y - display.bounds.y);
-    const send = (type) => wc.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 });
+    const send = (type) => wc.sendInputEvent({ type, x, y, button: 'left', clickCount: 1, modifiers: p.ctrl ? ['control'] : [] });
 
     if (last.wc && last.wc !== wc && !last.wc.isDestroyed()) last.wc.sendInputEvent({ type: 'mouseMove', x: -50, y: -50 });
 
@@ -54,7 +61,7 @@ function startForwarding() {
     }
 
     if (p.overDesktop) {
-      if (x !== last.x || y !== last.y || !last.over) send('mouseMove');
+      if (x !== last.x || y !== last.y || !last.over || p.ctrl !== last.ctrl) send('mouseMove');
       if (p.down && !last.down) {
         send('mouseDown');
         pressed = true;
@@ -68,8 +75,10 @@ function startForwarding() {
       if (pressed) wc.sendInputEvent({ type: 'mouseUp', x: -50, y: -50, button: 'left', clickCount: 1 });
       pressed = false;
     }
-    last = { x, y, down: p.down, over: p.overDesktop, wc };
-  }, 16);
+    last = { x, y, down: p.down, over: p.overDesktop, ctrl: p.ctrl, wc };
+    return p.overDesktop || p.down || !!(popup && !popup.isDestroyed() && popup.isVisible());
+  };
+  loop();
 }
 
 // ---------------------------------------------------------------- popups
@@ -216,6 +225,36 @@ async function systemState() {
 // ---------------------------------------------------------------- dock
 
 const ENV = (k) => process.env[k] || '';
+
+// Projects open in Antigravity when it's installed, otherwise VS Code.
+function editor() {
+  if (linux) return linux.editor();
+  const local = path.join(ENV('LOCALAPPDATA'), 'Programs');
+  const candidates = [
+    { name: 'Antigravity', exe: path.join(local, 'Antigravity IDE', 'Antigravity IDE.exe') },
+    { name: 'Antigravity', exe: path.join(local, 'Antigravity', 'Antigravity.exe') },
+    { name: 'VS Code', exe: path.join(local, 'Microsoft VS Code', 'Code.exe') },
+    { name: 'VS Code', exe: path.join(ENV('ProgramFiles'), 'Microsoft VS Code', 'Code.exe') },
+  ];
+  return candidates.find((c) => fs.existsSync(c.exe)) || null;
+}
+
+// every repo we know about, most recently touched first
+function projects() {
+  const when = (p) => {
+    for (const f of ['.git/logs/HEAD', '.git/index', '.git/HEAD']) {
+      try {
+        return fs.statSync(path.join(p, f)).mtimeMs;
+      } catch {}
+    }
+    return 0;
+  };
+  const list = git
+    .repoPaths()
+    .map((p) => ({ name: path.basename(p), path: p, at: when(p) }))
+    .sort((a, b) => b.at - a.at);
+  return { editor: editor()?.name || 'Explorer', list };
+}
 function candidates() {
   const pf = ENV('ProgramFiles') || 'C:\\Program Files';
   const pf86 = ENV('ProgramFiles(x86)') || 'C:\\Program Files (x86)';
@@ -237,6 +276,7 @@ function candidates() {
 }
 
 function defaultDock() {
+  if (linux) return linux.defaultDock();
   const found = [];
   const browsers = new Set(['Chrome', 'Edge', 'Brave']);
   let browserAdded = false;
@@ -256,6 +296,12 @@ const iconCache = new Map();
 async function iconFor(target) {
   if (iconCache.has(target)) return iconCache.get(target);
   let url = null;
+  if (linux && String(target).startsWith('desktop:')) {
+    const a = linux.apps().find((x) => x.id === target.slice(8));
+    url = a ? linux.iconDataUrl(a.icon) : null;
+    iconCache.set(target, url);
+    return url;
+  }
   if (!/^[a-z-]+:$/i.test(target) && fs.existsSync(target)) {
     try {
       url = (await app.getFileIcon(target, { size: 'large' })).toDataURL();
@@ -273,6 +319,7 @@ async function dockApps() {
 
 function launch(target) {
   if (!target) return;
+  if (linux && target.startsWith('desktop:')) return linux.launchApp(target.slice(8));
   if (/^[a-z][a-z0-9+.-]*:/i.test(target) && !/^[a-z]:\\/i.test(target)) return shell.openExternal(target);
   return shell.openPath(target);
 }
@@ -287,6 +334,7 @@ const SETTINGS = {
   focus: 'ms-settings:notifications',
   nightlight: 'ms-settings:nightlight',
   battery: 'ms-settings:batterysaver',
+  power: 'ms-settings:powersleep',
   settings: 'ms-settings:',
   screenshot: 'ms-screenclip:',
 };
@@ -294,6 +342,7 @@ const SETTINGS = {
 async function action(name, arg) {
   if (SETTINGS[name]) {
     closePopup();
+    if (linux) return linux.openSettings(name);
     return shell.openExternal(SETTINGS[name]);
   }
   switch (name) {
@@ -316,10 +365,13 @@ async function action(name, arg) {
     case 'repo': {
       closePopup();
       if (!arg || !fs.existsSync(arg)) return null;
-      const code = path.join(ENV('LOCALAPPDATA'), 'Programs\\Microsoft VS Code\\Code.exe');
-      if (fs.existsSync(code)) return require('child_process').spawn(code, [arg], { detached: true, stdio: 'ignore' }).unref();
+      const ide = editor();
+      if (ide) return require('child_process').spawn(ide.exe, [arg], { detached: true, stdio: 'ignore' }).unref();
       return shell.openPath(arg);
     }
+    case 'reveal':
+      closePopup();
+      return arg && fs.existsSync(arg) ? shell.openPath(arg) : null;
     case 'launch':
       return launch(arg);
     case 'spotlight':
@@ -330,6 +382,16 @@ async function action(name, arg) {
       return hooks.openPlayer?.();
     case 'wrapped':
       return openPopup(null, 'wrapped', { center: true });
+    case 'update':
+      return openPopup(null, 'update', { center: true });
+    case 'weather-panel':
+      return openPopup(null, 'weather', { center: true });
+    case 'settings-panel':
+      return openPopup(null, 'settings', { y: 34 });
+    case 'toggle-dark': {
+      const s = await systemState();
+      return setSystem('dark', !s?.dark);
+    }
     case 'open-widget':
       // ask the wallpaper to open the in-place editor for a (new) widget once it has rendered
       setTimeout(() => hooks.wallpapers().forEach((w) => !w.win.isDestroyed() && w.win.webContents.send('live:open', arg)), 250);
@@ -352,6 +414,12 @@ async function setSystem(key, value) {
       return system.setDarkMode(!!value);
     case 'taskbar':
       return native.setTaskbarAutoHide(!!value);
+    case 'power':
+      return native.setPowerMode(String(value));
+    case 'wifi-join':
+      return system.wifiConnect(String(value));
+    case 'audio-out':
+      return system.setAudioOutput(String(value));
     default:
       return null;
   }
@@ -366,14 +434,28 @@ function register(h) {
     dbg('resize', w, h2);
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win && win === popup) {
+      // keep it on screen: move it up if it grows past the bottom, cap it at the screen height
       const b = win.getBounds();
-      win.setBounds({ x: b.x, y: b.y, width: Math.round(w), height: Math.round(h2) });
+      const wa = screen.getDisplayMatching(b).workArea;
+      const height = Math.min(Math.round(h2), wa.height - 16);
+      const y = Math.max(wa.y + 8, Math.min(b.y, wa.y + wa.height - height - 8));
+      const width = Math.min(Math.round(w), wa.width - 16);
+      const x = Math.max(wa.x + 8, Math.min(b.x, wa.x + wa.width - width - 8));
+      win.setBounds({ x, y, width, height });
     }
   });
   ipcMain.handle('sys:state', () => systemState());
   ipcMain.handle('sys:set', (_e, key, value) => setSystem(key, value));
   ipcMain.handle('sys:action', (_e, name, arg) => action(name, arg));
   ipcMain.handle('dock:apps', () => dockApps());
+  ipcMain.handle('projects:list', () => projects());
+  // Control Center dropdowns
+  ipcMain.handle('cc:scan', async () => {
+    native.wifiScan();
+    await new Promise((r) => setTimeout(r, 3500)); // a scan takes a few seconds
+    return system.wifiNetworks();
+  });
+  ipcMain.handle('cc:list', (_e, what) => (what === 'wifi' ? system.wifiNetworks() : what === 'audio' ? system.audioOutputs() : what === 'power' ? native.powerMode() : null));
   startForwarding();
   setTimeout(() => {
     ensurePopup();

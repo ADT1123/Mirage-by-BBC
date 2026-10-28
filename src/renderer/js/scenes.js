@@ -42,6 +42,9 @@ const SCENES = {
     <div class="sc sc-midnight">
       <div class="eclipse"><div class="rim"></div></div>
       <div class="stars" style="box-shadow:${starShadows(90, 100, 100)}"></div>
+      <i class="shoot" style="--x:12vw;--y:6vh;--t:9s;--d:1.5s"></i>
+      <i class="shoot" style="--x:38vw;--y:3vh;--t:13s;--d:6s"></i>
+      <i class="shoot" style="--x:22vw;--y:30vh;--t:17s;--d:11s"></i>
       <div class="grain"></div>
     </div>`,
 

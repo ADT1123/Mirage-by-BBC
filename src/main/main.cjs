@@ -20,6 +20,9 @@ const activity = require('./activity.cjs');
 const ai = require('./ai.cjs');
 const wrapped = require('./wrapped.cjs');
 const organize = require('../shared/organize.cjs');
+const updater = require('./updater.cjs');
+const lyrics = require('./lyrics.cjs');
+const { Notification } = require('electron');
 
 const ROOT = path.join(__dirname, '..', '..');
 const PAGE = path.join(ROOT, 'src', 'renderer', 'index.html');
@@ -29,6 +32,25 @@ const ICON = path.join(ROOT, 'assets', 'tray.png');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 if (process.env.WALL_NO_GPU === '1') app.disableHardwareAcceleration();
+// Linux: run through X11/XWayland (GNOME and KDE honor the "desktop" window type there,
+// including on Wayland sessions like Ubuntu 26.04), with see-through popups.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+  app.commandLine.appendSwitch('enable-transparent-visuals');
+}
+
+// Every window is a sandboxed renderer: page code only reaches the app through preload.cjs,
+// can't open new windows, and can't navigate away from Mirage's own pages.
+app.enableSandbox();
+app.on('web-contents-created', (_e, wc) => {
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) require('electron').shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  wc.on('will-navigate', (e, url) => {
+    if (!url.startsWith('file://')) e.preventDefault();
+  });
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -64,6 +86,7 @@ function boot() {
   setupMedia();
   setupExtras();
   activity.start();
+  setupUpdates();
   spotlight.startIndexing({ repos: git.repoPaths, action: interact.action, runAction: runSpotlightAction });
   registerSpotlightIpc();
   setTimeout(createSpotlight, 1200);
@@ -82,7 +105,32 @@ function boot() {
   setInterval(() => {
     if (quitting || rebuildTimer) return;
     if (wallpapers.some((w) => w.win.isDestroyed() || (w.info && !desktop.isAttached(w.info)))) scheduleRebuild();
+    else for (const w of wallpapers) desktop.raise(w.info); // stay above other wallpaper apps
   }, 4000);
+
+  // rest (no animation at all) while a maximized/fullscreen app hides the wallpaper, or the PC is locked
+  let locked = false;
+  const { powerMonitor } = require('electron');
+  powerMonitor.on('lock-screen', () => ((locked = true), checkHidden()));
+  powerMonitor.on('unlock-screen', () => ((locked = false), checkHidden()));
+  powerMonitor.on('suspend', () => ((locked = true), checkHidden()));
+  powerMonitor.on('resume', () => ((locked = false), checkHidden()));
+  function checkHidden() {
+    const own = [editor, spot, player, interact.popupWindow()].filter((w) => w && !w.isDestroyed()).map((w) => desktop.hwndOf(w));
+    const mon = locked ? null : native.coveredMonitor(own);
+    for (const w of wallpapers) {
+      if (w.win.isDestroyed()) continue;
+      const b = screen.dipToScreenRect(null, w.win.getBounds());
+      const cx = b.x + b.width / 2;
+      const cy = b.y + b.height / 2;
+      const hidden = locked || !!(mon && cx >= mon.left && cx <= mon.right && cy >= mon.top && cy <= mon.bottom);
+      if (w.hidden !== hidden) {
+        w.hidden = hidden;
+        w.win.webContents.send('wall:hidden', hidden);
+      }
+    }
+  }
+  setInterval(checkHidden, 1500);
 }
 
 // ---------- wallpaper windows ----------
@@ -113,7 +161,9 @@ function buildWallpapers() {
     const entry = { win, info: null, displayId: d.id };
     logRenderer(win, 'wallpaper');
     wallpapers.push(entry);
-    win.loadFile(PAGE, { query: { mode: 'wallpaper', primary: d.id === primary.id ? '1' : '0' } });
+    // Linux desktops keep their own top panel over the wallpaper: start our menu bar below it
+    const inset = process.platform === 'linux' ? Math.max(0, d.workArea.y - d.bounds.y) : 0;
+    win.loadFile(PAGE, { query: { mode: 'wallpaper', primary: d.id === primary.id ? '1' : '0', inset: String(inset) } });
     win.once('ready-to-show', () => {
       const px = screen.dipToScreenRect(null, d.bounds);
       try {
@@ -202,9 +252,11 @@ function setupMedia() {
   media.onHistory((h) => sendAll('media:history', h));
   ipcMain.handle('media:get', () => media.get());
   ipcMain.handle('media:history', () => media.history());
+  ipcMain.handle('media:lyrics', (_e, track) => lyrics.get(track || {}));
   ipcMain.handle('media:cmd', (_e, cmd, arg) => media.command(cmd, arg));
   ipcMain.handle('player:open', () => openPlayer());
   ipcMain.handle('player:close', () => hidePlayer());
+  ipcMain.handle('player:painted', () => revealPlayer?.());
   // the visualizer listens to whatever the PC is playing (system audio loopback)
   session.defaultSession.setDisplayMediaRequestHandler((_req, cb) => {
     desktopCapturer
@@ -212,7 +264,7 @@ function setupMedia() {
       .then((sources) => cb({ video: sources[0], audio: 'loopback' }))
       .catch(() => cb({}));
   });
-  setTimeout(createPlayer, 3000);
+  // the player window is created the first time it's opened (saves memory on small laptops)
 }
 
 function createPlayer() {
@@ -220,6 +272,7 @@ function createPlayer() {
   player = new BrowserWindow({
     show: false,
     frame: false,
+    thickFrame: false, // no invisible resize border, so it covers the screen edge to edge
     skipTaskbar: false,
     backgroundColor: '#000000',
     title: 'Now Playing',
@@ -237,20 +290,29 @@ function createPlayer() {
   return player;
 }
 
+// A borderless window covering the whole screen (native fullscreen flashed grey and could hide
+// itself). It stays invisible until the page says it has drawn a frame.
+let revealPlayer = null;
 function openPlayer() {
   const win = createPlayer();
   const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  if (!win.isVisible()) win.setOpacity(0);
   win.setBounds(d.bounds);
-  win.webContents.send('player:show');
   win.show();
-  win.setFullScreen(true);
+  win.setBounds(d.bounds); // again, after show, in case Windows nudged it
   win.focus();
+  win.webContents.send('player:show');
+  const timer = setTimeout(() => revealPlayer?.(), 1500); // safety net if the page is slow
+  revealPlayer = () => {
+    clearTimeout(timer);
+    revealPlayer = null;
+    if (!win.isDestroyed()) win.setOpacity(1);
+  };
 }
 
 function hidePlayer() {
   if (!player || player.isDestroyed() || !player.isVisible()) return;
   player.webContents.send('player:hidden');
-  player.setFullScreen(false);
   player.hide();
 }
 
@@ -259,7 +321,7 @@ function sendAll(channel, payload) {
   for (const w of wins) if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
 }
 
-// ---------- Ask Claude and Wrapped ----------
+// ---------- Ask AI and Wrapped ----------
 
 function setupExtras() {
   ipcMain.handle('ai:ask', (_e, q) => {
@@ -267,10 +329,88 @@ function setupExtras() {
     return ai.ask(String(q || '').slice(0, 2000), { song: m.active && m.title ? `${m.title}${m.artist ? ` by ${m.artist}` : ''}` : '' });
   });
   ipcMain.handle('wrapped:data', () => wrapped.data());
+
+  // the Assistant widget: a running conversation, kept on disk so it survives restarts
+  const CHAT = path.join(config.DIR, 'chat.json');
+  let chat = [];
+  try {
+    chat = JSON.parse(fs.readFileSync(CHAT, 'utf8'));
+  } catch {}
+  const saveChat = () => {
+    chat = chat.slice(-40);
+    try {
+      fs.writeFileSync(CHAT, JSON.stringify(chat));
+    } catch {}
+  };
+  ipcMain.handle('chat:history', () => chat);
+  ipcMain.handle('chat:clear', () => {
+    chat = [];
+    saveChat();
+    return chat;
+  });
+  ipcMain.handle('chat:send', async (_e, text) => {
+    const q = String(text || '').trim().slice(0, 2000);
+    if (!q) return chat;
+    const m = media.get();
+    const r = await ai.ask(q, { song: m.active && m.title ? `${m.title}${m.artist ? ` by ${m.artist}` : ''}` : '' }, chat);
+    chat.push({ role: 'user', text: q, at: Date.now() }, { role: 'assistant', text: r.reply, done: r.done || [], error: !r.ok, at: Date.now() });
+    saveChat();
+    return chat;
+  });
+
+  // shortcuts: is this combination free?
+  ipcMain.handle('hotkey:test', (_e, accel, which) => testHotkey(accel, which));
   ipcMain.handle('wrapped:save', (_e, rect) => {
     const pop = interact.popupWindow();
     return pop ? wrapped.save(pop, rect) : null;
   });
+}
+
+// ---------- updates ----------
+
+function setupUpdates() {
+  updater.start();
+  updater.onAvailable((s) => {
+    sendAll('update:status', s);
+    refreshTray();
+    if (Notification.isSupported()) {
+      const n = new Notification({ title: `${brand.name} update available`, body: s.changes[0] ? `What's new: ${s.changes[0]}` : 'Click to update', icon: path.join(ROOT, 'assets', 'icon.png') });
+      n.on('click', () => interact.action('update'));
+      n.show();
+    }
+  });
+  ipcMain.handle('update:status', () => updater.status());
+  ipcMain.handle('update:check', async () => {
+    const s = await updater.check();
+    sendAll('update:status', s);
+    refreshTray();
+    return s;
+  });
+  ipcMain.handle('update:apply', async () => {
+    const r = await updater.apply();
+    if (r.ok) setTimeout(() => (app.relaunch(), app.exit(0)), 800); // restart into the new version
+    return r;
+  });
+}
+
+// ---------- shortcuts ----------
+
+const COMMON = { 'Ctrl+C': 'Copy', 'Ctrl+V': 'Paste', 'Ctrl+X': 'Cut', 'Ctrl+Z': 'Undo', 'Ctrl+A': 'Select all', 'Ctrl+S': 'Save', 'Ctrl+F': 'Find', 'Ctrl+T': 'New tab', 'Ctrl+W': 'Close tab', 'Alt+F4': 'Close window', 'Alt+Tab': 'Switch apps' };
+function testHotkey(accel, which) {
+  const show = (a) => String(a || '').replace('CommandOrControl', 'Ctrl');
+  const mine = which === 'spotlight' ? spotlightKey : activeHotkey;
+  const other = which === 'spotlight' ? activeHotkey : spotlightKey;
+  if (!accel) return { ok: false, reason: 'Press a key combination' };
+  if (show(accel) === show(other)) return { ok: false, reason: `Already used for ${which === 'spotlight' ? 'Rearrange' : 'Spotlight'}` };
+  if (show(accel) === show(mine)) return { ok: true, note: 'This is your current shortcut' };
+  if (COMMON[show(accel)]) return { ok: false, reason: `Windows and most apps use this for ${COMMON[show(accel)]}` };
+  try {
+    if (!globalShortcut.register(accel, () => {})) return { ok: false, reason: 'Another app is already using this shortcut' };
+    globalShortcut.unregister(accel);
+    return { ok: true, note: 'Free, nothing else uses it' };
+  } catch {
+    return { ok: false, reason: 'That key combination is not supported' };
+  }
 }
 
 // ---------- spotlight ----------
@@ -305,6 +445,7 @@ function showSpotlight() {
   const [w] = win.getSize();
   win.setPosition(Math.round(d.workArea.x + (d.workArea.width - w) / 2), Math.round(d.workArea.y + d.workArea.height * 0.2));
   win.webContents.send('spotlight:show');
+  ai.warm(); // the local model loads while you type
   win.show();
   win.focus();
 }
@@ -359,18 +500,19 @@ function registerSpotlightIpc() {
 // ---------- config sync ----------
 
 function broadcast(sender) {
-  const all = [...wallpapers.map((w) => w.win), editor, interact.popupWindow()].filter((w) => w && !w.isDestroyed());
+  const all = [...wallpapers.map((w) => w.win), editor, interact.popupWindow(), spot, player].filter((w) => w && !w.isDestroyed());
   for (const w of all) if (w.webContents !== sender) w.webContents.send('config:changed', cfg);
 }
 
 function onSave(next, sender) {
   const prevHotkey = cfg?.hotkey;
+  const prevSpot = cfg?.spotlightHotkey;
   const prevAuto = cfg?.autostart;
   cfg = next;
   lastJson = JSON.stringify(cfg);
   broadcast(sender);
   refreshTray();
-  if (cfg.hotkey !== prevHotkey) registerHotkey();
+  if (cfg.hotkey !== prevHotkey || cfg.spotlightHotkey !== prevSpot) registerHotkey();
   if (cfg.autostart !== prevAuto) applyAutostart();
 }
 
@@ -415,6 +557,7 @@ function refreshTray() {
     { label: 'Spotlight search', accelerator: spotlightKey || undefined, click: showSpotlight },
     { label: 'Now Playing', click: openPlayer },
     { label: 'Weekly Wrapped', click: () => interact.action('wrapped') },
+    updater.status().available ? { label: `Update available (${updater.status().behind} new)…`, click: () => interact.action('update') } : { label: 'Check for updates', click: () => interact.action('update') },
     {
       label: 'Theme',
       submenu: THEMES.map((t) => ({
@@ -426,7 +569,7 @@ function refreshTray() {
     },
     { label: 'Motion', type: 'checkbox', checked: cfg.motion !== false, click: (i) => config.update((c) => ((c.motion = i.checked), c)) },
     { type: 'separator' },
-    { label: 'Reload', click: buildWallpapers },
+    { label: 'Restart wallpaper', click: buildWallpapers },
     { label: `Quit ${brand.name}`, click: () => app.quit() },
   ]);
   tray.setContextMenu(menu);
@@ -449,7 +592,7 @@ function registerHotkey() {
   if (!activeHotkey) console.error('[wall] no edit hotkey could be registered; use the tray icon or the CLI');
 
   spotlightKey = null;
-  for (const accel of ['CommandOrControl+Space', 'Alt+Space', 'CommandOrControl+Shift+Space', 'CommandOrControl+Alt+Space']) {
+  for (const accel of [...new Set([cfg.spotlightHotkey || 'CommandOrControl+Space', 'CommandOrControl+Space', 'Alt+Space', 'CommandOrControl+Shift+Space', 'CommandOrControl+Alt+Space'])]) {
     try {
       if (globalShortcut.register(accel, toggleSpotlight)) {
         spotlightKey = accel;
@@ -462,6 +605,7 @@ function registerHotkey() {
 }
 
 function applyAutostart() {
+  if (process.platform === 'linux') return require('./linux.cjs').setAutostart(!!cfg.autostart, process.execPath, ROOT);
   if (!app.isPackaged && process.platform === 'win32') {
     app.setLoginItemSettings({ openAtLogin: !!cfg.autostart, path: process.execPath, args: [ROOT] });
   } else {
@@ -473,8 +617,9 @@ function applyAutostart() {
 
 function startControlServer() {
   const server = http.createServer((req, res) => {
-    // Browsers can't send this header cross-origin without a preflight we never answer.
-    if (req.headers['x-wall'] !== '1') {
+    // Browsers can't send this header cross-origin without a preflight we never answer,
+    // and the Host check stops web pages that re-point their own domain at 127.0.0.1.
+    if (req.headers['x-wall'] !== '1' || !/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(String(req.headers.host || ''))) {
       res.writeHead(403).end();
       return;
     }
@@ -483,6 +628,11 @@ function startControlServer() {
       res.end(JSON.stringify(obj));
     };
     const url = new URL(req.url, 'http://x');
+    // test hooks exist only when started with WALL_DEBUG=1
+    if (url.pathname.startsWith('/debug') && process.env.WALL_DEBUG !== '1') {
+      res.writeHead(404).end();
+      return;
+    }
     // test hook: click an element on the primary wallpaper the same way forwarded clicks do
     if (url.pathname === '/debug-click') {
       const wp = wallpapers.find((w) => !w.win.isDestroyed());
@@ -493,7 +643,7 @@ function startControlServer() {
         .then((pt) => {
           if (!pt) return reply({ ok: false, reason: 'not found' });
           const wc = wp.win.webContents;
-          for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x: Math.round(pt.x), y: Math.round(pt.y), button: 'left', clickCount: 1 });
+          for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x: Math.round(pt.x), y: Math.round(pt.y), button: 'left', clickCount: 1, modifiers: ['control'] });
           reply({ ok: true, pt });
         });
       return;
@@ -509,6 +659,7 @@ function startControlServer() {
           hotkey: activeHotkey,
           spotlight: spotlightKey,
           index: spotlight.stats(),
+          player: player && !player.isDestroyed() ? { visible: player.isVisible(), opacity: player.getOpacity(), min: player.isMinimized(), fs: player.isFullScreen(), focused: player.isFocused(), bounds: player.getBounds() } : null,
         });
       case '/edit':
         openEditor();
@@ -516,8 +667,20 @@ function startControlServer() {
       case '/spotlight':
         showSpotlight();
         return reply({ ok: true });
+      case '/update-check':
+        updater.check().then((s) => (sendAll('update:status', s), refreshTray(), reply(s)));
+        return;
+      case '/update-apply':
+        updater.apply().then((r) => {
+          reply(r);
+          if (r.ok) setTimeout(() => (app.relaunch(), app.exit(0)), 800);
+        });
+        return;
       case '/wrapped':
         interact.action('wrapped');
+        return reply({ ok: true });
+      case '/player-close':
+        hidePlayer();
         return reply({ ok: true });
       case '/player':
         openPlayer();
@@ -543,7 +706,8 @@ function startControlServer() {
       case '/debug-shot': {
         const wp = wallpapers.find((w) => !w.win.isDestroyed());
         if (!wp) return reply({ ok: false });
-        const target = url.searchParams.get('win') === 'popup' ? interact.popupWindow() : wp.win;
+        const which = url.searchParams.get('win');
+        const target = which === 'popup' ? interact.popupWindow() : which === 'player' ? player : which === 'spot' ? spot : wp.win;
         target.webContents.capturePage().then((img) => {
           const file = path.join(config.DIR, 'debug-shot.png');
           fs.writeFileSync(file, img.resize({ width: 1280 }).toPNG());
@@ -551,6 +715,16 @@ function startControlServer() {
         });
         return;
       }
+      case '/debug-popup-click': {
+        const pop = interact.popupWindow();
+        if (!pop) return reply({ ok: false });
+        const sel = JSON.stringify(url.searchParams.get('sel') || '');
+        pop.webContents.executeJavaScript(`(() => { const e = document.querySelector(${sel}); if (!e) return false; e.click(); return true; })()`).then((ok) => reply({ ok }));
+        return;
+      }
+      case '/debug-weather':
+        require('./weather.cjs').get(config.load(), true).then((r) => reply(r));
+        return;
       case '/debug-media': {
         const m = media.get();
         return reply({ ...m, art: m.art ? `${m.art.slice(0, 40)}… (${m.art.length})` : null });
@@ -559,7 +733,7 @@ function startControlServer() {
         const pop = interact.popupWindow();
         if (!pop) return reply({ popup: null });
         pop.webContents
-          .executeJavaScript(`({ url: location.search, mode: document.documentElement.dataset.mode, html: document.getElementById('chrome').innerHTML.slice(0, 160), chromeH: document.getElementById('chrome').getBoundingClientRect().height, hasWall: typeof window.wall })`)
+          .executeJavaScript(`({ dpr: devicePixelRatio, url: location.search, mode: document.documentElement.dataset.mode, html: document.getElementById('chrome').innerHTML.slice(0, 160), chromeH: document.getElementById('chrome').getBoundingClientRect().height, hasWall: typeof window.wall })`)
           .then((page) => reply({ popupVisible: pop.isVisible(), popupBounds: pop.getBounds(), page }))
           .catch((e) => reply({ popupVisible: pop.isVisible(), error: String(e) }));
         return;

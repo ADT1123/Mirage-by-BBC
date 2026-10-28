@@ -23,7 +23,9 @@ function defaults() {
     planet: 'moon', // Astronomy theme: moon | mars | earth
     weatherFx: 'auto', // rain/snow over the desktop when it's really happening: auto | off | rain | snow | storm
     pet: 'cat', // a little desktop pet on the dock: cat | bird | off
-    ai: { model: 'claude-opus-5-5' }, // the API key lives in secrets.json, never here
+    perf: 'auto', // auto | saver | full: auto saves power on battery and on modest laptops
+    season: 'off', // only when you pick one: spring | summer | autumn | winter | auto (follows the calendar) | off
+    ai: { model: 'llama3.1:8b' }, // local model served by Ollama
     motion: true,
     background: null, // absolute path to an image, or null for the theme scene
     dim: 0.25, // darkening over a custom background image

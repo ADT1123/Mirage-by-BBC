@@ -25,6 +25,8 @@ export function start(env = {}) {
       <button class="np-viz-toggle" title="Visualizer on/off (V)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14v4M8 10v8M12 6v12M16 11v7M20 8v10"/></svg></button>
       <button class="np-hist-toggle" title="Recently played (H)">${icon('clock')}</button>
       <aside class="np-history"><h2>Recently played</h2><div class="np-hlist"></div></aside>
+      <button class="np-lyr-toggle" title="Lyrics (L)">${icon('lyrics')}</button>
+      <section class="np-lyrics"></section>
       <main class="np-main">
         <div class="np-art"><img alt="" draggable="false" /><div class="np-noart">${icon('volume')}</div></div>
         <div class="np-meta">
@@ -128,6 +130,7 @@ export function start(env = {}) {
   } catch {}
   const showHistory = (on) => {
     histOpen = on;
+    if (on && root.classList.contains('show-lyrics')) $('.np-lyr-toggle').click(); // one side panel at a time
     root.classList.toggle('show-history', on);
     $('.np-hist-toggle').classList.toggle('on', on);
     try {
@@ -151,6 +154,72 @@ export function start(env = {}) {
     paint();
   });
   setInterval(tick, 250);
+
+  // ---- synced lyrics (Apple Music style): the current line lights up and scrolls to center
+  let lyr = { key: '', data: null, idx: -1 };
+  let lyrOpen = false;
+  try {
+    lyrOpen = localStorage.getItem('np-lyrics') === '1';
+  } catch {}
+  const lyrBox = $('.np-lyrics');
+  const loadLyrics = async () => {
+    if (!m.active || !m.title || lyr.key === m.key) return;
+    lyr = { key: m.key, data: null, idx: -1 };
+    lyrBox.innerHTML = '<p class="np-lmsg">Finding lyrics…</p>';
+    const key = m.key;
+    const data = await window.wall.lyrics({ title: m.title, artist: m.artist, album: m.album, duration: mediaPosition(m).dur });
+    if (lyr.key !== key) return;
+    lyr.data = data;
+    if (data?.synced?.length) lyrBox.innerHTML = data.synced.map((l, i) => `<p class="np-line" data-i="${i}">${esc(l.text) || '♪'}</p>`).join('');
+    else if (data?.plain) lyrBox.innerHTML = `<p class="np-plain">${esc(data.plain).replace(/\n/g, '<br>')}</p>`;
+    else lyrBox.innerHTML = `<p class="np-lmsg">${data?.instrumental ? 'Instrumental' : data?.offline ? 'Lyrics need an internet connection' : 'No lyrics found for this song'}</p>`;
+  };
+  const syncLyrics = () => {
+    const lines = lyr.data?.synced;
+    if (!lyrOpen || !lines?.length) return;
+    const pos = mediaPosition(m).pos + 0.25; // a hair early feels right
+    let i = -1;
+    while (i + 1 < lines.length && lines[i + 1].t <= pos) i++;
+    if (i === lyr.idx) return;
+    lyr.idx = i;
+    lyrBox.querySelectorAll('.np-line').forEach((el, n) => {
+      el.classList.toggle('on', n === i);
+      el.classList.toggle('past', n < i);
+    });
+    const el = lyrBox.querySelector(`.np-line[data-i="${i}"]`);
+    if (el) {
+      el.classList.add('on');
+      lyrBox.scrollTo({ top: el.offsetTop - lyrBox.clientHeight * 0.38, behavior: 'smooth' });
+    }
+  };
+  const showLyrics = (on) => {
+    lyrOpen = on;
+    root.classList.toggle('show-lyrics', on);
+    $('.np-lyr-toggle').classList.toggle('on', on);
+    if (on && root.classList.contains('show-history')) $('.np-hist-toggle').click(); // one side panel at a time
+    try {
+      localStorage.setItem('np-lyrics', on ? '1' : '0');
+    } catch {}
+    lyr.idx = -1;
+    if (on) loadLyrics();
+  };
+  $('.np-lyr-toggle').addEventListener('click', () => showLyrics(!lyrOpen));
+  window.addEventListener('keydown', (e) => {
+    if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.altKey) showLyrics(!lyrOpen);
+  });
+  // tap a line to jump there (when the player allows seeking)
+  lyrBox.addEventListener('click', (e) => {
+    const line = lyr.data?.synced?.[Number(e.target.closest('.np-line')?.dataset.i)];
+    if (!line || !(mediaPosition(m).dur > 0 && m.canSeek !== false)) return;
+    window.wall.mediaCmd('seek', line.t);
+    m = { ...m, position: line.t, updated: Date.now(), clock: { base: line.t, since: Date.now(), playing: m.playing } };
+  });
+  setInterval(() => {
+    if (lyrOpen) loadLyrics();
+    syncLyrics();
+  }, 250);
+  showLyrics(lyrOpen);
+
 
   // controls
   root.addEventListener('click', (e) => {
@@ -242,10 +311,14 @@ export function start(env = {}) {
   });
   paintViz();
 
+  // tell the main process once a real frame is on screen, so it can fade the window in
+  const painted = () => requestAnimationFrame(() => requestAnimationFrame(() => window.wall.playerPainted?.()));
   window.wall.onPlayerShow(() => {
     syncVolume();
     if (vizOn) startVisualizer(root);
+    painted();
   });
+  painted(); // opened before this page had loaded
   window.wall.onPlayerHidden(stopVisualizer);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {

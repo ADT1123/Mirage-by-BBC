@@ -1,4 +1,7 @@
-// Minimal line icons (24px grid, stroke = currentColor).
+// Line icons (24px grid, stroke = currentColor). Most come from Lucide (see lucide.js);
+// the filled media controls below are our own.
+
+import { LUCIDE } from './lucide.js';
 
 const P = {
   sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/>',
@@ -9,9 +12,16 @@ const P = {
   snow: '<path d="M7 14.5h10.2a4.3 4.3 0 0 0 .6-8.56A6 6 0 0 0 6.3 7a3.8 3.8 0 0 0 .7 7.5Z"/><path d="M8.5 18v.01M12 19.5v.01M15.5 18v.01M10 21.5v.01M14 21.5v.01" stroke-width="2.4"/>',
   storm: '<path d="M7 14.5h10.2a4.3 4.3 0 0 0 .6-8.56A6 6 0 0 0 6.3 7a3.8 3.8 0 0 0 .7 7.5Z"/><path d="M12.5 13l-2.5 4h3.5l-2 4"/>',
   fog: '<path d="M7 12.5h10.2a4.3 4.3 0 0 0 .6-8.56A6 6 0 0 0 6.3 5a3.8 3.8 0 0 0 .7 7.5Z"/><path d="M4 16h16M6 19.5h12"/>',
-  sparkle: '<path d="M12 3.5l1.9 5.2a2 2 0 0 0 1.2 1.2l5.2 1.9-5.2 1.9a2 2 0 0 0-1.2 1.2L12 20.1l-1.9-5.2a2 2 0 0 0-1.2-1.2l-5.2-1.9 5.2-1.9a2 2 0 0 0 1.2-1.2Z"/><path d="M19 3v3M17.5 4.5h3"/>',
+  sparkle: '<path d="M12 2.8c.55 4.7 2.5 7.65 9.2 9.2-6.7 1.55-8.65 4.5-9.2 9.2-.55-4.7-2.5-7.65-9.2-9.2 6.7-1.55 8.65-4.5 9.2-9.2Z" fill="currentColor" stroke="none"/>',
   share: '<path d="M12 15V3.5M7.5 8 12 3.5 16.5 8"/><path d="M5 12.5v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>',
   music: '<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  leaf: '<path d="M5 19c0-8 5-14 15-15-1 10-7 15-15 15Z"/><path d="M5 19 13 11"/>',
+  flower: '<circle cx="12" cy="12" r="2.2"/><path d="M12 9.8c-1.6-3.2-.6-6 0-6.3.6.3 1.6 3.1 0 6.3ZM14.2 12c3.2-1.6 6-.6 6.3 0-.3.6-3.1 1.6-6.3 0ZM12 14.2c1.6 3.2.6 6 0 6.3-.6-.3-1.6-3.1 0-6.3ZM9.8 12c-3.2 1.6-6 .6-6.3 0 .3-.6 3.1-1.6 6.3 0Z"/>',
+  stocks: '<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
+  send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
+  lyrics: '<path d="M4 6h10M4 10h10M4 14h6"/><circle cx="17" cy="17" r="2.5"/><path d="M19.5 17V7l2-1"/>',
+  assistant: '<path d="M12 2.8c.55 4.7 2.5 7.65 9.2 9.2-6.7 1.55-8.65 4.5-9.2 9.2-.55-4.7-2.5-7.65-9.2-9.2 6.7-1.55 8.65-4.5 9.2-9.2Z"/>',
+  bolt: '<path d="M13 2.5 4.5 13.5h6.5l-1 8 8.5-11h-6.5z"/>',
   wifi: '<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.3a9.6 9.6 0 0 1 13 0M8.6 15.6a5 5 0 0 1 6.8 0"/><circle cx="12" cy="19" r=".9" fill="currentColor"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -61,9 +71,10 @@ const P = {
   chevron: '<path d="M9 6l6 6-6 6"/>',
   check2: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
+Object.assign(P, LUCIDE);
 
 export function icon(name, cls = '') {
-  return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
+  return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 }
 
 export function weatherIcon(kind, isDay = true) {
@@ -73,5 +84,5 @@ export function weatherIcon(kind, isDay = true) {
 
 export function batteryIcon(level = 1, charging = false) {
   const w = Math.max(1.5, Math.round(13 * level * 10) / 10);
-  return `<svg class="ico batt" viewBox="0 0 28 14" aria-hidden="true"><rect x="1" y="1" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1.2"/><rect x="24.5" y="4.6" width="2" height="4.8" rx="1" fill="currentColor" fill-opacity=".55"/><rect x="3" y="3" width="${(w / 13) * 18}" height="8" rx="2" fill="currentColor"/>${charging ? '<path d="M13 2.5l-3 5h3l-1.5 4.5 4-6h-3l1.5-3.5z" fill="var(--bolt, #fff)" stroke="none"/>' : ''}</svg>`;
+  return `<svg class="ico batt" viewBox="0 0 28 14" aria-hidden="true"><rect x="1" y="1" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1.2"/><rect x="24.5" y="4.6" width="2" height="4.8" rx="1" fill="currentColor" fill-opacity=".55"/><rect x="3" y="3" width="${(w / 13) * 18}" height="8" rx="2" fill="currentColor"/>${charging ? '<path d="M13.6 1.6 9.2 7.6h3.4l-1.4 4.8 4.6-6.4h-3.4l1.2-4.4z" fill="var(--bolt, #111)" stroke="#fff" stroke-width=".9" stroke-linejoin="round"/>' : ''}</svg>`;
 }

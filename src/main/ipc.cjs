@@ -5,6 +5,8 @@ const config = require('../shared/config.cjs');
 const git = require('./git.cjs');
 const weather = require('./weather.cjs');
 const feeds = require('./feeds.cjs');
+const stocks = require('./stocks.cjs');
+const native = require('./native.cjs');
 const { THEMES } = require('../shared/themes.cjs');
 const brand = require('../shared/brand.cjs');
 const { WIDGETS, NOTE_COLORS, presetLayout, make } = require('../shared/widgets.cjs');
@@ -59,8 +61,10 @@ function register(hooks = {}) {
   ipcMain.handle('data:weather', (_e, force) => weather.get(config.load(), !!force));
   ipcMain.handle('data:forecast', () => weather.forecast(config.load()));
   ipcMain.handle('data:geocode', (_e, name) => weather.geocode(String(name || '')).catch(() => null));
-  ipcMain.handle('data:quote', () => feeds.quote());
-  ipcMain.handle('data:verse', () => feeds.verse());
+  ipcMain.handle('data:quote', (_e, every) => feeds.quote(every));
+  ipcMain.handle('data:verse', (_e, every) => feeds.verse(every));
+  ipcMain.handle('data:power', () => native.powerStatus());
+  ipcMain.handle('data:stocks', (_e, symbols) => stocks.quotes(Array.isArray(symbols) ? symbols : []));
   ipcMain.handle('data:art', async () => {
     const a = await feeds.art();
     return a ? { ...a, url: pathToFileURL(a.file).href } : null;

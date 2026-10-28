@@ -1,0 +1,70 @@
+// Updates for people who cloned the repo: every few hours we ask git whether the GitHub
+// branch has new commits. If so, the wallpaper shows "Update available"; one click pulls,
+// reinstalls dependencies when they changed, and restarts.
+
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+
+const ROOT = path.join(__dirname, '..', '..');
+const EVERY = 3 * 60 * 60 * 1000;
+
+let status = { available: false, behind: 0, changes: [], checked: 0, error: null };
+let listeners = [];
+let busy = false;
+
+function git(args, timeout = 60000) {
+  return new Promise((resolve) => {
+    execFile('git', args, { cwd: ROOT, windowsHide: true, timeout }, (err, out, errOut) => resolve({ ok: !err, out: String(out || '').trim(), err: String(errOut || err?.message || '').trim() }));
+  });
+}
+
+function npmInstall() {
+  return new Promise((resolve) => {
+    execFile(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], { cwd: ROOT, windowsHide: true, shell: true, timeout: 10 * 60 * 1000 }, (err) => resolve(!err));
+  });
+}
+
+const isRepo = () => fs.existsSync(path.join(ROOT, '.git'));
+
+async function check() {
+  if (!isRepo()) return (status = { ...status, error: 'not-a-clone', checked: Date.now() });
+  const fetched = await git(['fetch', '--quiet']);
+  if (!fetched.ok) return (status = { ...status, error: 'offline', checked: Date.now() });
+  const behind = Number((await git(['rev-list', '--count', 'HEAD..@{u}'])).out) || 0;
+  const log = behind ? (await git(['log', '--format=%s', '-n', '8', 'HEAD..@{u}'])).out.split('\n').filter(Boolean) : [];
+  const was = status.available;
+  status = { available: behind > 0, behind, changes: log, checked: Date.now(), error: null };
+  if (status.available && !was) for (const fn of listeners) fn(status);
+  return status;
+}
+
+// pull, reinstall if package files changed, then the caller restarts the app
+async function apply() {
+  if (busy) return { ok: false, reason: 'An update is already running' };
+  busy = true;
+  try {
+    if (!isRepo()) return { ok: false, reason: 'This copy was not cloned with git, so it cannot update itself' };
+    const dirty = (await git(['status', '--porcelain', '--untracked-files=no'])).out;
+    if (dirty) return { ok: false, reason: 'You have changed files in this folder. Commit or undo them first, then update' };
+    const before = (await git(['rev-parse', 'HEAD'])).out;
+    const pulled = await git(['pull', '--ff-only', '--quiet'], 120000);
+    if (!pulled.ok) return { ok: false, reason: 'Could not download the update. Check your internet connection' };
+    const after = (await git(['rev-parse', 'HEAD'])).out;
+    const changed = (await git(['diff', '--name-only', before, after])).out.split('\n');
+    if (changed.some((f) => f === 'package.json' || f === 'package-lock.json') && !(await npmInstall())) {
+      return { ok: false, reason: 'Downloaded, but installing new parts failed. Run npm install' };
+    }
+    status = { available: false, behind: 0, changes: [], checked: Date.now(), error: null };
+    return { ok: true, from: before.slice(0, 7), to: after.slice(0, 7) };
+  } finally {
+    busy = false;
+  }
+}
+
+function start() {
+  setTimeout(check, 2 * 60 * 1000); // shortly after startup, then every few hours
+  setInterval(check, EVERY).unref?.();
+}
+
+module.exports = { start, check, apply, status: () => status, onAvailable: (fn) => listeners.push(fn) };

@@ -12,11 +12,21 @@ const GROUPS = [
   ['repo', 'Repositories'],
   ['folder', 'Folders'],
   ['file', 'Documents'],
-  ['ai', 'Ask Claude'],
+  ['ai', 'Ask AI'],
   ['web', 'Web'],
 ];
 const LIMIT = { app: 5, action: 3, setting: 3, repo: 3, folder: 4, file: 6, calc: 1, web: 1, ai: 1, quick: 1 };
 const GLYPH = { app: 'app', action: 'palette', setting: 'gear', repo: 'feed', folder: 'folder', file: 'file', web: 'globe', calc: 'calc', ai: 'sparkle', quick: 'plus' };
+
+// shown when the box is empty: one tap does it, or fills in the right prefix
+const QUICK = [
+  { label: 'Note', icon: 'note', fill: 'note ' },
+  { label: 'To-do', icon: 'todo', fill: 'todo ' },
+  { label: 'Ask AI', icon: 'sparkle', fill: 'ask ' },
+  { label: 'Music', icon: 'music', run: 'player' },
+  { label: 'Weather', icon: 'weather', run: 'weather-panel' },
+  { label: 'Settings', icon: 'gear', run: 'settings-panel' },
+];
 
 let rows = [];
 let sel = 0;
@@ -34,7 +44,7 @@ export function start() {
       </div>
       <div class="sp-list"></div>
       <div class="sp-ai" hidden></div>
-      <div class="sp-foot"><span><kbd>↵</kbd> open</span><span><kbd>Ctrl</kbd><kbd>↵</kbd> show in folder</span><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>esc</kbd> close</span></div>
+      <div class="sp-foot"><span><kbd>↵</kbd> open</span><span><kbd>Ctrl</kbd><kbd>↵</kbd> show in folder</span><span><kbd>Tab</kbd> complete</span><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>esc</kbd> close</span></div>
     </div>`;
   const input = root.querySelector('.sp-input');
   const list = root.querySelector('.sp-list');
@@ -71,12 +81,16 @@ export function start() {
         html += section(label, items, rows.length);
         rows.push(...items);
       }
-    } else if (!q && results.length) {
-      html += section('Frequently used', results, 0);
-      rows.push(...results);
+    } else if (!q) {
+      html += `<div class="sp-quick">${QUICK.map((a, i) => `<button data-quick="${i}">${icon(a.icon)}<span>${a.label}</span></button>`).join('')}</div>`;
+      if (results.length) {
+        html += section('Frequently used', results.slice(0, 5), 0);
+        rows.push(...results.slice(0, 5));
+      }
+      html += '<div class="sp-tip">Try <kbd>note buy milk</kbd> <kbd>ask plan my day</kbd> <kbd>18% of 2400</kbd> <kbd>10 km to mi</kbd></div>';
     }
     list.innerHTML = html;
-    sp.classList.toggle('has-results', rows.length > 0);
+    sp.classList.toggle('has-results', rows.length > 0 || !q);
     root.querySelector('.sp-badge').textContent = q && rows.length ? `${rows.length} results` : '';
     sel = 0;
     highlight();
@@ -116,12 +130,12 @@ export function start() {
   const open = (reveal) => {
     const it = rows[sel];
     if (!it) return;
-    if (it.kind === 'ai') return askClaude(it.target);
+    if (it.kind === 'ai') return askAI(it.target);
     window.wall.spotOpen(it, reveal);
   };
 
-  // the answer shows right here; anything Claude organized is already on the wallpaper
-  const askClaude = async (question) => {
+  // the answer shows right here; anything the AI organized is already on the wallpaper
+  const askAI = async (question) => {
     const my = ++asking;
     list.hidden = true;
     aiBox.hidden = false;
@@ -142,6 +156,13 @@ export function start() {
       if (!rows.length) return;
       sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
       highlight();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const it = rows[sel];
+      if (it && ['app', 'file', 'folder', 'repo', 'action', 'setting'].includes(it.kind)) {
+        input.value = it.title;
+        query();
+      }
     } else if (e.key === 'Enter') {
       e.preventDefault();
       open(e.ctrlKey || e.metaKey);
@@ -161,6 +182,14 @@ export function start() {
     }
   });
   list.addEventListener('click', (e) => {
+    const qb = e.target.closest('[data-quick]');
+    if (qb) {
+      const a = QUICK[Number(qb.dataset.quick)];
+      if (a.run) return window.wall.spotOpen({ kind: 'action', target: a.run }, false);
+      input.value = a.fill;
+      input.focus();
+      return query();
+    }
     const r = e.target.closest('.sp-row');
     if (!r) return;
     sel = Number(r.dataset.i);

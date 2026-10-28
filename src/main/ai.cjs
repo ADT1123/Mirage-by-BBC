@@ -1,53 +1,31 @@
-// "Ask Claude" from Spotlight: a quick assistant that can answer and also organize your
-// desktop (to-dos, notes, countdowns, theme). Claude replies with a short answer plus a
-// list of structured actions, which we validate and apply ourselves.
+// "Ask AI" from Spotlight: a local Llama model (through Ollama) that answers questions and
+// can organize your desktop (to-dos, notes, countdowns, theme). Nothing leaves this PC.
+// The model replies with a short answer plus structured actions, which we validate and apply.
 
-const fs = require('fs');
-const path = require('path');
-const sdk = require('@anthropic-ai/sdk');
+const { spawn } = require('child_process');
 const config = require('../shared/config.cjs');
 const brand = require('../shared/brand.cjs');
 const { THEMES } = require('../shared/themes.cjs');
 const organize = require('../shared/organize.cjs');
 
-const Anthropic = sdk.default || sdk;
-const SECRETS = path.join(config.DIR, 'secrets.json');
-const DEFAULT_MODEL = 'claude-opus-5-5';
-// models that accept server-side refusal fallbacks
-const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
-
-// the key lives apart from config.json, which is shared with every wallpaper page
-function secrets() {
-  try {
-    return JSON.parse(fs.readFileSync(SECRETS, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function setSecret(key, value) {
-  const s = secrets();
-  if (value) s[key] = value;
-  else delete s[key];
-  fs.mkdirSync(config.DIR, { recursive: true });
-  fs.writeFileSync(SECRETS, JSON.stringify(s, null, 2), { mode: 0o600 });
-}
+const HOST = process.env.OLLAMA_HOST ? `http://${process.env.OLLAMA_HOST.replace(/^https?:\/\//, '')}` : 'http://127.0.0.1:11434';
+const DEFAULT_MODEL = 'llama3.1:8b';
 
 const SYSTEM = `You are the assistant built into ${brand.name}, a desktop wallpaper app with sticky notes, a to-do list, countdowns and themes.
-Answer in plain text, at most three short sentences, no markdown. Be warm and direct.
+You can answer any general question. "reply" is always a natural sentence to the user (never an action name), in plain text, no markdown, short and direct (a few sentences at most unless the user asks for more). When you change things, say briefly what you did.
+When asked to sort or prioritize, decide the order yourself from deadlines and wording (e.g. "due tomorrow" is urgent) instead of asking.
 When the user asks you to add, plan, sort, prioritize, clean up or otherwise organize things, do it through actions:
 - add_todo: text = the task
 - complete_todo / remove_todo: index = the task's number in the current list (0-based)
-- set_todos: items = the whole to-do list in its new order (to prioritize, group, dedupe or split tasks). Keep each task's wording unless asked to change it.
-- add_note: text = the note; color = yellow, pink, blue, green or purple (empty for the default)
+- set_todos: items = the whole to-do list in its new order, most urgent or important first (to prioritize, group, dedupe or split tasks). Include every task plus any new ones asked for in the same request, using only the task text (no numbers or "(done)"). Keep each task's wording unless asked to change it.
+- add_note: text = the note; color = yellow, pink, blue, green or purple ("" for the default)
 - set_countdown: text = title, date = YYYY-MM-DD
 - set_theme: text = a theme id from the list
-Fill unused fields with "" (strings), -1 (index) or [] (items). For plain questions, return no actions.
+Fill unused fields with "" (strings), -1 (index) or [] (items). For plain questions, actions must be [].
 Never invent tasks the user didn't mention. If something is ambiguous, ask in the reply instead of acting.`;
 
 const SCHEMA = {
   type: 'object',
-  additionalProperties: false,
   required: ['reply', 'actions'],
   properties: {
     reply: { type: 'string' },
@@ -55,8 +33,7 @@ const SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        additionalProperties: false,
-        required: ['type', 'text', 'index', 'date', 'color', 'items'],
+        required: ['type'],
         properties: {
           type: { type: 'string', enum: ['add_todo', 'complete_todo', 'remove_todo', 'set_todos', 'add_note', 'set_countdown', 'set_theme'] },
           text: { type: 'string' },
@@ -70,7 +47,7 @@ const SCHEMA = {
   },
 };
 
-// what Claude can see: today's date and the things it may organize
+// what the model can see: today's date and the things it may organize
 function context(cfg, extra) {
   const todos = cfg.widgets.find((w) => w.type === 'todo')?.items || [];
   const notes = cfg.widgets.filter((w) => w.type === 'note' && w.text).map((w) => w.text);
@@ -78,7 +55,7 @@ function context(cfg, extra) {
   const now = new Date();
   return [
     `Now: ${now.toDateString()}, ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-    `To-do list:\n${todos.length ? todos.map((t, i) => `${i}. [${t.done ? 'x' : ' '}] ${t.text}`).join('\n') : '(empty)'}`,
+    `To-do list (number: task):\n${todos.length ? todos.map((t, i) => `${i}: ${t.text}${t.done ? '  (done)' : ''}`).join('\n') : '(empty)'}`,
     `Sticky notes:\n${notes.length ? notes.map((n) => `- ${n}`).join('\n') : '(none)'}`,
     `Countdowns: ${countdowns.join('; ') || '(none)'}`,
     `Current theme: ${cfg.theme}. Themes: ${THEMES.map((t) => t.id).join(', ')}`,
@@ -88,52 +65,93 @@ function context(cfg, extra) {
     .join('\n\n');
 }
 
-function client() {
-  const key = secrets().anthropicKey;
-  return new Anthropic(key ? { apiKey: key } : {});
+async function call(pathname, body, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(`${HOST}${pathname}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
+    return data;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
-function failure(e) {
-  if (e instanceof Anthropic.AuthenticationError) return `That API key didn't work. Set a new one with: ${brand.command} ai key <your key>`;
-  if (e instanceof Anthropic.RateLimitError) return 'Claude is busy right now. Try again in a moment.';
-  if (e instanceof Anthropic.APIConnectionError) return "Couldn't reach Claude. Check your internet connection.";
-  if (e instanceof Anthropic.APIError) return `Claude returned an error (${e.status ?? 'unknown'}).`;
-  if (/api.?key|credential|auth/i.test(String(e?.message))) return `Add your Claude API key first: ${brand.command} ai key <your key>`;
-  return 'Something went wrong asking Claude.';
+// Ollama installed but not running? start it quietly and wait for it to answer
+let starting = null;
+async function ensureServer() {
+  try {
+    return await call('/api/version', null, 1500);
+  } catch {}
+  starting ||= (async () => {
+    try {
+      spawn('ollama', ['serve'], { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref();
+    } catch {
+      return null;
+    }
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      try {
+        return await call('/api/version', null, 1000);
+      } catch {}
+    }
+    return null;
+  })().finally(() => (starting = null));
+  return starting;
+}
+
+async function models() {
+  if (!(await ensureServer())) return null;
+  try {
+    return (await call('/api/tags', null, 4000)).models?.map((m) => m.name) || [];
+  } catch {
+    return [];
+  }
 }
 
 // -> { ok, reply, done: [summary lines], model }
-async function ask(question, extra = {}) {
+async function ask(question, extra = {}, history = []) {
   const cfg = config.load();
   const model = cfg.ai?.model || DEFAULT_MODEL;
-  const request = {
-    model,
-    max_tokens: 16000,
-    system: SYSTEM,
-    messages: [{ role: 'user', content: `${context(cfg, extra)}\n\n<request>\n${question}\n</request>` }],
-    // low effort keeps it quick; the schema makes the reply machine-readable
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+  if (!(await ensureServer())) return { ok: false, reply: 'The local AI needs Ollama. Install it from ollama.com, then run: ollama pull llama3.1:8b' };
+  const messages = [
+    { role: 'system', content: SYSTEM },
+    ...history.slice(-12).map((m) => ({ role: m.role, content: m.role === 'assistant' ? JSON.stringify({ reply: m.text, actions: [] }) : m.text })),
+    { role: 'user', content: `${context(cfg, extra)}\n\n<request>\n${question}\n</request>` },
+  ];
+  const chat = async () => {
+    const res = await call('/api/chat', { model, stream: false, format: SCHEMA, keep_alive: '15m', options: { temperature: 0.3 }, messages }, 120000);
+    return JSON.parse(res.message?.content || '');
   };
-  let res;
-  try {
-    const c = client();
-    res = FALLBACK_MODELS.includes(model)
-      ? await c.beta.messages.create({ ...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
-      : await c.messages.create(request);
-  } catch (e) {
-    return { ok: false, reply: failure(e) };
-  }
-  if (res.stop_reason === 'refusal') return { ok: false, reply: "Claude can't help with that one." };
-  const text = res.content.find((b) => b.type === 'text')?.text || '';
   let out;
   try {
-    out = JSON.parse(text);
-  } catch {
-    return { ok: false, reply: res.stop_reason === 'max_tokens' ? 'That answer ran too long. Try a shorter question.' : 'Claude sent back something unreadable. Try again.' };
+    out = await chat();
+    // small models sometimes say "I added it" without sending the action: ask once more
+    if (!out.actions?.length && /\b(added|pinned|noted|sorted|reorganized|removed|ticked|marked|set|changed|switched)\b/i.test(out.reply || '')) {
+      messages.push({ role: 'assistant', content: JSON.stringify(out) }, { role: 'user', content: 'Your reply says you made a change, but "actions" is empty. Send the same reply with the actions filled in.' });
+      out = await chat();
+    }
+  } catch (e) {
+    if (e.status === 404) return { ok: false, reply: `The model "${model}" isn't downloaded yet. Run: ollama pull ${model}` };
+    if (e.name === 'AbortError') return { ok: false, reply: 'The model took too long. Try a smaller one: brow ai model llama3.2:1b' };
+    if (e instanceof SyntaxError) return { ok: false, reply: 'The model sent back something unreadable. Try again.' };
+    return { ok: false, reply: `The local model failed: ${e.message}` };
   }
   let done = [];
   if (Array.isArray(out.actions) && out.actions.length) config.update((c) => ((done = organize.apply(c, out.actions)), c));
-  return { ok: true, reply: String(out.reply || ''), done, model: res.model };
+  return { ok: true, reply: String(out.reply || '').trim() || (done.length ? 'Done.' : ''), done, model };
 }
 
-module.exports = { ask, setSecret, hasKey: () => !!(secrets().anthropicKey || process.env.ANTHROPIC_API_KEY), DEFAULT_MODEL };
+// load the model ahead of time (e.g. when Spotlight opens) so the first answer is quick
+async function warm() {
+  const model = config.load().ai?.model || DEFAULT_MODEL;
+  if (await ensureServer()) call('/api/generate', { model, keep_alive: '15m' }, 60000).catch(() => {});
+}
+
+module.exports = { ask, warm, models, DEFAULT_MODEL };

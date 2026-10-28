@@ -19,6 +19,8 @@ const WIDGETS = [
   { type: 'music', name: 'Now Playing', desc: 'What’s playing, with controls and a full-screen player' },
   { type: 'art', name: 'Darshan', desc: 'A public-domain devotional painting, new each day' },
   { type: 'verse', name: 'Gita Verse', desc: 'A Bhagavad Gita shloka with meaning, daily' },
+  { type: 'assistant', name: 'Assistant', desc: 'Chat with your private AI; it can also organize your notes and to-dos' },
+  { type: 'stocks', name: 'Stocks', desc: 'Live prices and day change for your watchlist' },
 ];
 
 const NOTE_COLORS = ['yellow', 'pink', 'blue', 'green', 'purple'];
@@ -41,6 +43,8 @@ function defaultsFor(type) {
     }
     case 'quote':
       return { text: '', author: '' };
+    case 'stocks':
+      return { symbols: ['^NSEI', '^BSESN', 'RELIANCE.NS', 'TCS.NS'] };
     case 'stack':
       return { items: [{ type: 'weather' }, { type: 'calendar' }, { type: 'music' }], interval: 12 };
     default:

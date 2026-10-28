@@ -10,7 +10,7 @@ debug-*.png
 *.tmp
 scratch/
 
-# local secrets (the app keeps its API key in ~/.mirage/secrets.json, but just in case)
+# local secrets
 .env
 .env.*
 secrets.json

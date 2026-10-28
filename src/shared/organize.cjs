@@ -42,7 +42,9 @@ function todoList(cfg) {
 }
 
 function addTodo(cfg, text) {
-  todoList(cfg).items.push({ text, done: false });
+  const list = todoList(cfg);
+  if (list.items.some((i) => i.text.toLowerCase() === text.toLowerCase())) return `Already on your list: ${text}`;
+  list.items.push({ text, done: false });
   return `Added to-do: ${text}`;
 }
 
@@ -70,7 +72,9 @@ function apply(cfg, actions = []) {
         break;
       }
       case 'set_todos': {
-        const items = (a.items || []).map((t) => String(t).trim()).filter(Boolean);
+        // models sometimes copy list markers: strip numbers, checkboxes and "(done)"
+        const clean = (t) => String(t).replace(/^\s*(\d+[.:)]\s*)?(\[[ xX]?\]\s*)?/, '').replace(/\s*\(done\)\s*$/i, '').trim();
+        const items = [...new Map((a.items || []).map(clean).filter(Boolean).map((t) => [t.toLowerCase(), t])).values()];
         if (!items.length) break;
         const list = todoList(cfg);
         const wasDone = new Set(list.items.filter((i) => i.done).map((i) => i.text.toLowerCase()));

@@ -63,6 +63,15 @@ async function walkLinks(dir, out) {
 }
 
 async function indexApps() {
+  if (process.platform === 'linux') {
+    const linux = require('./linux.cjs');
+    const seen = new Set();
+    apps = linux
+      .apps()
+      .filter((a) => !seen.has(a.name) && seen.add(a.name))
+      .map((a) => ({ kind: 'app', id: `app:${a.id}`, title: a.name, subtitle: 'Application', target: `desktop:${a.id}`, icon: a.icon, key: a.name.toLowerCase() }));
+    return;
+  }
   if (process.platform !== 'win32') return;
   const links = new Map();
   await walkLinks(path.join(process.env.ProgramData || 'C:\\ProgramData', 'Microsoft\\Windows\\Start Menu\\Programs'), links);
@@ -153,12 +162,28 @@ const SETTINGS = [
   ['About this PC', 'about', 'about pc specs system info'],
 ].map(([title, page, words]) => ({ kind: 'setting', id: `set:${page}`, title, subtitle: 'Settings', target: `ms-settings:${page}`, key: `${title} ${words}`.toLowerCase() }));
 
+// Linux: the same idea with GNOME's settings pages
+const LINUX_SETTINGS = [
+  ['Wi-Fi', 'wifi', 'wifi internet network wireless'],
+  ['Bluetooth', 'bluetooth', 'bluetooth headphones devices'],
+  ['Display', 'display', 'screen resolution scale brightness monitor night light'],
+  ['Sound', 'sound', 'audio volume speakers microphone output'],
+  ['Power', 'power', 'battery power saver sleep'],
+  ['Notifications', 'focus', 'notifications do not disturb'],
+  ['Settings', 'settings', 'settings control center preferences'],
+].map(([title, page, words]) => ({ kind: 'setting', id: `set:${page}`, title, subtitle: 'Settings', target: `linux:${page}`, key: `${title} ${words}`.toLowerCase() }));
+if (process.platform === 'linux') SETTINGS.splice(0, SETTINGS.length, ...LINUX_SETTINGS);
+
 function actions() {
   const list = [
     { title: 'Edit wallpaper', action: 'edit', words: 'customize layout widgets' },
     { title: 'New sticky note', action: 'note', words: 'note sticky add' },
     { title: 'Lock PC', action: 'lock', words: 'lock screen' },
     { title: 'Weekly Wrapped', action: 'wrapped', words: 'wrapped week summary stats recap share' },
+    { title: 'Weather forecast', action: 'weather-panel', words: 'weather forecast rain temperature' },
+    { title: 'Wallpaper settings', action: 'settings-panel', words: 'settings preferences mirage theme widgets' },
+    { title: 'Toggle dark mode', action: 'toggle-dark', words: 'dark light mode appearance night' },
+    { title: 'Restart wallpaper', action: 'restart', words: 'restart reload refresh wallpaper' },
     { title: 'Now Playing', action: 'player', words: 'music player song history' },
     { title: 'Take a screenshot', action: 'screenshot', words: 'screenshot snip capture' },
     ...THEMES.map((t) => ({ title: `Theme: ${t.name}`, action: 'theme', arg: t.id, words: `theme ${t.tagline}` })),
@@ -197,7 +222,38 @@ function score(q, key) {
 
 const WEIGHT = { app: 320, action: 120, setting: 160, repo: 140, folder: 60, file: 0 };
 
+// "10 km to mi", "100 f in c", "5 kg to lb": everyday unit conversions
+const UNITS = {
+  km: ['len', 1000], m: ['len', 1], cm: ['len', 0.01], mm: ['len', 0.001], mi: ['len', 1609.344], ft: ['len', 0.3048], in: ['len', 0.0254], yd: ['len', 0.9144],
+  kg: ['mass', 1], g: ['mass', 0.001], lb: ['mass', 0.45359237], oz: ['mass', 0.028349523],
+  l: ['vol', 1], ml: ['vol', 0.001], gal: ['vol', 3.785411784], cup: ['vol', 0.2365882365],
+  kmh: ['speed', 1], mph: ['speed', 1.609344], ms: ['speed', 3.6],
+  gb: ['data', 1024], mb: ['data', 1], tb: ['data', 1048576], kb: ['data', 1 / 1024],
+};
+const ALIAS = { kilometers: 'km', kilometer: 'km', meters: 'm', meter: 'm', miles: 'mi', mile: 'mi', feet: 'ft', foot: 'ft', inches: 'in', inch: 'in', kgs: 'kg', grams: 'g', pounds: 'lb', lbs: 'lb', litres: 'l', liters: 'l', 'km/h': 'kmh', 'm/s': 'ms', celsius: 'c', fahrenheit: 'f', kelvin: 'k' };
+function convert(q) {
+  const m = q.trim().toLowerCase().match(/^(-?[\d.,]+)\s*([a-z/]+)\s+(?:to|in)\s+([a-z/]+)$/);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  const from = ALIAS[m[2]] || m[2];
+  const to = ALIAS[m[3]] || m[3];
+  let v = null;
+  const temp = { c: (x) => x, f: (x) => ((x - 32) * 5) / 9, k: (x) => x - 273.15 };
+  const fromC = { c: (x) => x, f: (x) => (x * 9) / 5 + 32, k: (x) => x + 273.15 };
+  if (temp[from] && fromC[to]) v = fromC[to](temp[from](n));
+  else if (UNITS[from] && UNITS[to] && UNITS[from][0] === UNITS[to][0]) v = (n * UNITS[from][1]) / UNITS[to][1];
+  if (v === null || !isFinite(v)) return null;
+  const label = (u) => ({ c: '°C', f: '°F', k: 'K', kmh: 'km/h', ms: 'm/s' })[u] || u;
+  const text = `${Number(v.toFixed(v < 10 ? 3 : 2)).toLocaleString('en-US')} ${label(to)}`;
+  return { kind: 'calc', id: 'calc', title: text, subtitle: `${m[1]} ${label(from)} = ${text} · Enter copies`, target: text };
+}
+
 function calc(q) {
+  const conv = convert(q);
+  if (conv) return conv;
+  // "18% of 2400"
+  const pct = q.trim().match(/^(-?[\d.]+)\s*%\s*of\s*(-?[\d.,]+)$/i);
+  if (pct) q = `${pct[1]} / 100 * ${pct[2].replace(/,/g, '')}`;
   if (!/^[\d\s+\-*/().%^,]+$/.test(q) || !/[+\-*/^%]/.test(q) || !/\d/.test(q)) return null;
   try {
     const v = Function(`"use strict"; return (${q.replace(/,/g, '').replace(/\^/g, '**')})`)();
@@ -217,7 +273,7 @@ function quick(raw) {
   const text = m[2].trim();
   if (verb === 'note') return { kind: 'quick', id: 'quick:note', title: `Pin a sticky note: “${text}”`, subtitle: 'Enter to add', target: 'note-add', arg: text };
   if (verb === 'todo' || verb === 'to-do') return { kind: 'quick', id: 'quick:todo', title: `Add to-do: “${text}”`, subtitle: 'Enter to add', target: 'todo-add', arg: text };
-  return { kind: 'ai', id: 'ai', title: `Ask Claude: “${text}”`, subtitle: 'Enter to ask', target: text };
+  return { kind: 'ai', id: 'ai', title: `Ask AI: “${text}”`, subtitle: 'Local Llama · Enter to ask', target: text };
 }
 
 function search(raw) {
@@ -259,7 +315,7 @@ function search(raw) {
   const results = out.slice(0, 40);
   const c = calc(raw);
   if (c) results.unshift(c);
-  results.push({ kind: 'ai', id: 'ai', title: `Ask Claude “${raw.trim()}”`, subtitle: 'Answers and organizes your notes and to-dos', target: raw.trim() });
+  results.push({ kind: 'ai', id: 'ai', title: `Ask AI “${raw.trim()}”`, subtitle: 'Local Llama · answers and organizes your notes and to-dos', target: raw.trim() });
   results.push({ kind: 'web', id: 'web', title: `Search the web for “${raw.trim()}”`, subtitle: 'Google', target: `https://www.google.com/search?q=${encodeURIComponent(raw.trim())}` });
   return results;
 }
@@ -320,7 +376,9 @@ async function iconFor(item) {
   if (iconCache.has(cacheKey)) return iconCache.get(cacheKey);
   let url = null;
   try {
-    if (item.kind === 'app') {
+    if (item.kind === 'app' && item.target?.startsWith('desktop:')) {
+      url = require('./linux.cjs').iconDataUrl(item.icon);
+    } else if (item.kind === 'app') {
       const lnk = lnkByName.get(item.title.toLowerCase());
       if (item.target.includes('!')) url = await storeIcon(item.target);
       if (!url && lnk) url = (await app.getFileIcon(/.lnk$/i.test(lnk) ? shortcutTarget(lnk) : lnk, { size: 'large' })).toDataURL();
@@ -344,6 +402,7 @@ async function open(item, reveal = false) {
   if (item.id && !['web', 'calc', 'quick', 'ai'].includes(item.kind)) bump(item.id);
   switch (item.kind) {
     case 'app':
+      if (item.target?.startsWith('desktop:')) return require('./linux.cjs').launchApp(item.target.slice(8));
       if (/^[a-z]:\\/i.test(item.target) && fs.existsSync(item.target)) return shell.openPath(item.target);
       return spawn('explorer.exe', [`shell:AppsFolder\\${item.target}`], { detached: true, stdio: 'ignore' }).unref();
     case 'file':
@@ -352,6 +411,8 @@ async function open(item, reveal = false) {
     case 'repo':
       return reveal ? shell.openPath(item.target) : hooks.action?.('repo', item.target);
     case 'setting':
+      if (item.target.startsWith('linux:')) return require('./linux.cjs').openSettings(item.target.slice(6));
+      return shell.openExternal(item.target);
     case 'web':
       return shell.openExternal(item.target);
     case 'calc':

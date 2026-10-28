@@ -520,24 +520,25 @@ export const COMMANDS = [
   },
   {
     name: 'ai',
-    args: '<question> | key <api-key> | model <id>',
-    desc: 'Ask Claude, or let it organize your notes and to-dos',
+    args: '<question> | model [name] | models',
+    desc: 'Ask the local AI, or let it organize your notes and to-dos',
     async run(args) {
       const [sub, ...rest] = args;
-      if (sub === 'key') {
-        const key = rest.join('').trim();
-        if (!key) return fail('Paste your key after /ai key', ['Get one at https://console.anthropic.com']);
-        ai.setSecret('anthropicKey', key === 'clear' ? null : key);
-        return ok(key === 'clear' ? 'API key removed' : 'API key saved', [`Stored in ${path.join(config.DIR, 'secrets.json')}, never in config.json`]);
+      const current = () => config.load().ai?.model || ai.DEFAULT_MODEL;
+      if (sub === 'models') {
+        const list = await ai.models();
+        if (!list) return fail('Ollama is not installed', ['Get it from https://ollama.com, then: ollama pull llama3.1:8b']);
+        if (!list.length) return fail('No models downloaded yet', ['Run: ollama pull llama3.1:8b']);
+        return ok('Local models', list.map((m) => `${m === current() ? '●' : '○'} ${m}`), { hint: 'Switch with /ai model <name>' });
       }
       if (sub === 'model') {
         const id = rest[0];
-        if (!id) return ok(`Model: ${config.load().ai?.model || ai.DEFAULT_MODEL}`);
+        if (!id) return ok(`Model: ${current()}`, [], { hint: 'See what you have with /ai models' });
         const extra = await change((c) => ((c.ai = { ...(c.ai || {}), model: id }), c));
         return ok(`Model set to ${id}`, [], extra);
       }
       const q = args.join(' ').trim();
-      if (!q) return ok('Ask Claude', [`Model: ${config.load().ai?.model || ai.DEFAULT_MODEL}`, `Key: ${ai.hasKey() ? 'set' : 'not set (run /ai key <your key>)'}`, 'Try: /ai sort my to-dos by priority', 'Or in Spotlight: ask plan my evening']);
+      if (!q) return ok('Ask AI (runs locally with Ollama)', [`Model: ${current()}`, 'Try: /ai sort my to-dos by priority', 'Or in Spotlight: ask plan my evening']);
       const r = await ai.ask(q);
       return r.ok ? ok(r.reply, (r.done || []).map((d) => `✓ ${d}`)) : fail(r.reply);
     },
@@ -560,6 +561,93 @@ export const COMMANDS = [
       if (!['cat', 'bird', 'off'].includes(v)) return fail('Use /pet cat, bird or off');
       const extra = await change((c) => ((c.pet = v), c));
       return ok(v === 'off' ? 'Pet is taking a nap (off)' : `Say hi to your ${v}`, v === 'off' ? [] : ['Click it on the wallpaper'], extra);
+    },
+  },
+  {
+    name: 'doctor',
+    desc: 'Check this computer: which Mirage features will work here',
+    async run() {
+      const { execFileSync } = await import('child_process');
+      const has = (bin) => {
+        try {
+          execFileSync(process.platform === 'win32' ? 'where' : 'sh', process.platform === 'win32' ? [bin] : ['-c', `command -v ${bin}`], { stdio: 'ignore' });
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      const line = (okay, what, why) => `${okay ? '✓' : '·'} ${what}${okay ? '' : `  (${why})`}`;
+      const lines = [`Node ${process.versions.node} · ${process.platform}`];
+      if (process.platform === 'linux') {
+        const session = process.env.XDG_SESSION_TYPE || 'unknown';
+        const desk = process.env.XDG_CURRENT_DESKTOP || 'unknown';
+        lines.push(`Desktop: ${desk} · session: ${session}${session === 'wayland' ? ' (runs through XWayland)' : ''}`);
+        lines.push(
+          line(has('gdbus'), 'Now Playing + brightness (D-Bus)', 'needs gdbus, part of GLib'),
+          line(has('wpctl') || has('pactl'), 'Volume', 'needs PipeWire (wpctl) or PulseAudio (pactl)'),
+          line(has('pactl'), 'Sound output picker', 'needs pactl'),
+          line(has('nmcli'), 'Wi-Fi list and connect', 'needs NetworkManager (nmcli)'),
+          line(has('gsettings'), 'Dark mode, dock auto-hide, shortcuts', 'GNOME only'),
+          line(has('powerprofilesctl'), 'Power mode', 'needs power-profiles-daemon'),
+          line(has('loginctl'), 'Lock screen', 'needs systemd'),
+          line(has('gtk-launch'), 'Dock and Spotlight app launching', 'falls back to running the app directly'),
+          line(has('git'), 'Updates', 'needs git'),
+          line(has('ollama'), 'Assistant (local AI)', 'optional: install Ollama yourself if you want it'),
+        );
+        if (session === 'wayland') lines.push('Tip: run /shortcuts once so Alt+W and Ctrl+Space work on Wayland');
+      } else {
+        lines.push(line(has('git'), 'Updates', 'needs git'), line(has('ollama'), 'Assistant (local AI)', 'optional: install Ollama'));
+      }
+      return ok('Mirage check-up', lines);
+    },
+  },
+  {
+    name: 'shortcuts',
+    desc: 'Linux (GNOME): add Alt+W and Ctrl+Space as system shortcuts',
+    async run() {
+      if (process.platform !== 'linux') return ok('Shortcuts already work on Windows', ['Change them in Settings → More settings']);
+      const { createRequire } = await import('module');
+      const linux = createRequire(import.meta.url)('../src/main/linux.cjs');
+      const cli = `"${process.execPath}" "${path.join(path.dirname((await import('url')).fileURLToPath(import.meta.url)), 'main.mjs')}"`;
+      const done = linux.installShortcuts(cli, { edit: '<Alt>w', spotlight: '<Control>space' });
+      return done ? ok('Added to GNOME keyboard shortcuts', ['Alt+W  rearrange', 'Ctrl+Space  Spotlight', 'Change them in Settings → Keyboard → Custom Shortcuts']) : fail('GNOME settings not found', ['Add shortcuts in your desktop settings that run: brow edit / brow spotlight']);
+    },
+  },
+  {
+    name: 'stocks',
+    args: 'add <SYMBOL> | remove <SYMBOL> | list',
+    desc: 'Your Stocks widget watchlist (Yahoo symbols: ^NSEI, TCS.NS, AAPL)',
+    complete: () => ['add', 'remove', 'list'].map((v) => ({ value: v, desc: '' })),
+    async run([sub, sym]) {
+      const cfg = config.load();
+      const w = cfg.widgets.find((x) => x.type === 'stocks');
+      const list = w?.symbols || [];
+      if (!sub || sub === 'list') return w ? ok('Watchlist', list.length ? list : ['(empty)']) : ok('No Stocks widget yet', [], { hint: 'Add one with /add stocks' });
+      const s = String(sym || '').toUpperCase();
+      if (!s) return fail(`Which symbol? e.g. /stocks ${sub} RELIANCE.NS`);
+      const extra = await change((c) => {
+        let x = c.widgets.find((y) => y.type === 'stocks');
+        if (!x) {
+          const [px, py] = spot(c);
+          x = make('stocks', px, py);
+          c.widgets.push(x);
+        }
+        x.symbols = sub === 'remove' ? (x.symbols || []).filter((y) => y !== s) : [...new Set([...(x.symbols || []), s])].slice(0, 8);
+        return c;
+      });
+      return ok(sub === 'remove' ? `Removed ${s}` : `Watching ${s}`, [], extra);
+    },
+  },
+  {
+    name: 'season',
+    args: 'auto | spring | summer | autumn | winter | off',
+    desc: 'Seasonal wallpaper: cherry petals, summer light, falling leaves or snow',
+    complete: () => ['auto', 'spring', 'summer', 'autumn', 'winter', 'off'].map((v) => ({ value: v, desc: '' })),
+    async run([v]) {
+      const all = ['auto', 'spring', 'summer', 'autumn', 'winter', 'off'];
+      if (!all.includes(v)) return fail('Use /season auto, spring, summer, autumn, winter or off');
+      const extra = await change((c) => ((c.season = v), c));
+      return ok(v === 'auto' ? 'Season follows the calendar' : v === 'off' ? 'Seasons off' : `It's ${v} on your desktop`, [], extra);
     },
   },
   {

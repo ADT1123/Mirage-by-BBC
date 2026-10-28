@@ -14,7 +14,7 @@ let listeners = [];
 let restartTimer = null;
 const artCache = new Map();
 const thumbs = new Map();
-const lastLookup = new Map(); // track key -> when we last asked iTunes // track key -> cover straight from Windows (data URL)
+const lastLookup = new Map(); // track key -> when we last asked iTunes
 
 // Recently played (last 10, with small covers) and a play log for Wrapped.
 const HISTORY_FILE = path.join(config.DIR, 'history.json');
@@ -85,26 +85,58 @@ function prettyApp(id = '') {
   return id.split('!')[0].split('_')[0].split('.').filter((p) => !/^(exe|app|inc|microsoft|com)$/i.test(p)).pop() || id;
 }
 
+// Apple's search is picky about word order and only searches one country's store at a time,
+// so try a few phrasings in your own store first, then the US one, and keep the best match.
+function stores() {
+  let local = '';
+  try {
+    local = require('electron').app.getLocaleCountryCode?.() || '';
+  } catch {}
+  if (!local) local = (Intl.DateTimeFormat().resolvedOptions().locale.split('-')[1] || '').toUpperCase();
+  return [...new Set([local, 'US'].filter((c) => /^[A-Z]{2}$/.test(c)))];
+}
+
+async function itunes(term, country) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=8&country=${country}`, { signal: ctrl.signal });
+    return (await res.json()).results || [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function lookupArt(title, artist) {
   const key = `${artist}|${title}`.toLowerCase();
   if (artCache.has(key)) return artCache.get(key);
+  const clean = (s) => s.replace(/\(.*?\)|\[.*?\]|feat\..*$/gi, '').trim();
+  const norm = (s) => clean(String(s || '')).toLowerCase().replace(/[^a-z0-9ऀ-ॿ ]/g, '');
+  // only trust a hit if it's really this song by this artist
+  const matches = (r) => {
+    const sameTitle = norm(r.trackName).includes(norm(title)) || norm(title).includes(norm(r.trackName));
+    const sameArtist = norm(r.artistName).split(' ').some((w) => w.length > 1 && norm(artist).includes(w));
+    return sameTitle && sameArtist && r.artworkUrl100;
+  };
+  const firstArtist = clean(artist).split(/,|&| x | and /i)[0].trim();
+  const terms = [...new Set([`${clean(title)} ${firstArtist}`, clean(title)])];
   let found = null;
+  let answered = false; // got at least one real result list (an empty one can mean Apple is throttling us)
   try {
-    const clean = (s) => s.replace(/\(.*?\)|\[.*?\]|feat\..*$/gi, '').trim();
-    const term = encodeURIComponent(`${clean(artist)} ${clean(title)}`.trim());
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 6000);
-    const res = await fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=1`, { signal: ctrl.signal });
-    clearTimeout(t);
-    const r = (await res.json()).results?.[0];
-    // only trust the hit if it's really this song by this artist
-    const norm = (s) => clean(String(s || '')).toLowerCase().replace(/[^a-z0-9ऀ-ॿ ]/g, '');
-    const sameTitle = r && (norm(r.trackName).includes(norm(title)) || norm(title).includes(norm(r.trackName)));
-    const sameArtist = r && norm(r.artistName).split(' ').some((w) => w.length > 1 && norm(artist).includes(w));
-    if (r && sameTitle && sameArtist) found = { art: r.artworkUrl100?.replace(/100x100bb/, '1000x1000bb'), duration: r.trackTimeMillis ? r.trackTimeMillis / 1000 : 0, album: r.collectionName || '' };
-  } catch {
-    return null; // network not ready yet: try again on a later update
-  }
+    search: for (const country of stores()) {
+      for (const term of terms) {
+        const list = await itunes(term, country);
+        if (list.length) answered = true;
+        const r = list.find(matches);
+        if (r) {
+          found = { art: r.artworkUrl100.replace(/100x100bb/, '1200x1200bb'), duration: r.trackTimeMillis ? r.trackTimeMillis / 1000 : 0, album: r.collectionName || '' };
+          break search;
+        }
+      }
+    }
+  } catch {}
+  // nothing back at all (offline or throttled): undefined means "ask again later", and isn't remembered
+  if (!found && !answered) return undefined;
   artCache.set(key, found);
   return found;
 }
@@ -172,12 +204,14 @@ async function onLine(line) {
   state = next;
   emit();
 
-  const needsArt = !next.art && s.title && artist && !artCache.has(`${artist}|${s.title}`.toLowerCase()) && Date.now() - (lastLookup.get(key) || 0) > 20000;
+  // no cover yet, or only the small one from Windows: (re)ask Apple for the full-size one now and then
+  const upgrade = !next.art || next.artSource === 'windows';
+  const needsArt = upgrade && s.title && artist && !artCache.has(`${artist}|${s.title}`.toLowerCase()) && Date.now() - (lastLookup.get(key) || 0) > (next.art ? 45000 : 20000);
   if ((!sameTrack || needsArt) && s.title && artist) {
     lastLookup.set(key, Date.now());
     // iTunes only when it's an exact match: sharper art and the real track length
     const info = await lookupArt(s.title, artist);
-    if (state.key !== key || !info) return;
+    if (state.key !== key || !info) return; // undefined = Apple didn't answer; asked again shortly
     state = { ...state, art: info.art || state.art, artSource: info.art ? 'itunes' : state.artSource, duration: state.reported ? state.duration : info.duration, album: state.album || info.album };
     emit();
   }
@@ -188,7 +222,40 @@ setInterval(() => {
   if (state.active && !state.art && lastRaw) onLine(lastRaw);
 }, 30000).unref?.();
 
+// Linux: ask the active MPRIS player once a second and feed the same lines the Windows helper prints
+let linuxTimer = null;
+function startLinux() {
+  const linux = require('./linux.cjs');
+  let last = '';
+  let lastArt = '';
+  let lastSent = 0;
+  const poll = async () => {
+    let s;
+    try {
+      s = await linux.mediaState();
+    } catch {
+      s = { active: false };
+    }
+    const { artUrl, ...line } = s;
+    // like media.ps1: only speak up when something changed (or every few seconds for the position)
+    const sig = JSON.stringify({ ...line, position: Math.round((line.position || 0) / 3), updated: 0 });
+    if (sig !== last || Date.now() - lastSent > 5000) {
+      last = sig;
+      lastSent = Date.now();
+      onLine(JSON.stringify(line));
+    }
+    if (s.active && artUrl && artUrl !== lastArt) {
+      lastArt = artUrl;
+      const thumb = linux.artFor(artUrl);
+      if (thumb) onLine(JSON.stringify({ thumb, key: `${s.app}|${s.title}|${s.artist}` }));
+    }
+  };
+  poll();
+  linuxTimer = setInterval(poll, 1000);
+}
+
 function start() {
+  if (process.platform === 'linux' && !linuxTimer) return startLinux();
   if (process.platform !== 'win32' || child) return;
   child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT], { windowsHide: true });
   let buf = '';
@@ -209,6 +276,8 @@ function start() {
 }
 
 function stop() {
+  clearInterval(linuxTimer);
+  linuxTimer = null;
   clearTimeout(restartTimer);
   restartTimer = null;
   if (child) {
@@ -220,10 +289,11 @@ function stop() {
 }
 
 function command(cmd, arg) {
-  if (!child) return;
   const allowed = ['toggle', 'play', 'pause', 'next', 'prev', 'shuffle', 'repeat', 'seek'];
   if (!allowed.includes(cmd)) return;
-  child.stdin.write(cmd === 'seek' ? `seek ${Number(arg) || 0}\n` : `${cmd}\n`);
+  if (linuxTimer) require('./linux.cjs').mediaCommand(cmd, Number(arg) || 0);
+  else if (child) child.stdin.write(cmd === 'seek' ? `seek ${Number(arg) || 0}\n` : `${cmd}\n`);
+  else return;
   if (cmd === 'seek') {
     clock.base = Number(arg) || 0;
     clock.since = Date.now();
@@ -236,6 +306,7 @@ module.exports = {
   command,
   get: () => state,
   onChange: (fn) => listeners.push(fn),
+  lookupArt, // exposed for tests
   history: () => history.recent,
   plays: () => history.plays,
   onHistory: (fn) => historyListeners.push(fn),
