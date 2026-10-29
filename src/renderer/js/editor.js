@@ -4,6 +4,7 @@
 import { icon } from './icons.js';
 import { esc } from './widgets.js';
 import { renderWidgetForm } from './widgetform.js';
+import { wallPicker } from './wallpicker.js';
 
 const SNAP = 7;
 const MARGIN = 0.04;
@@ -15,6 +16,7 @@ export function createEditor(app) {
   let panel = null;
   let selected = null;
   let usePack = false;
+  let picker = null;
 
   document.body.classList.add('editing');
   // opening the editor once means the first-run hint has done its job
@@ -27,12 +29,7 @@ export function createEditor(app) {
       <span class="ed-sep"></span>drag to move<span class="ed-sep"></span>drag corner to resize<span class="ed-sep"></span><kbd>Esc</kbd> done
     </div>
     <div class="ed-guide gx"></div><div class="ed-guide gy"></div>
-    <div class="ed-panel" data-panel="themes">
-      <div class="ed-panel-head"><span>Themes</span>
-        <label class="ed-check"><input type="checkbox" data-k="pack" /> use pack layout</label>
-      </div>
-      <div class="ed-themes"></div>
-    </div>
+    <div class="ed-panel" data-panel="themes"><div class="ed-wp"></div></div>
     <div class="ed-panel" data-panel="widgets">
       <div class="ed-panel-head"><span>Widgets</span><span class="ed-sub">click to add or remove</span></div>
       <div class="ed-widgets"></div>
@@ -43,7 +40,7 @@ export function createEditor(app) {
       <div class="ed-settings"></div>
     </div>
     <div class="ed-dock">
-      <button data-open="themes">${icon('palette')}<span>Themes</span></button>
+      <button data-open="themes">${icon('palette')}<span>Wallpapers</span></button>
       <button data-open="widgets">${icon('grid')}<span>Widgets</span></button>
       <button data-open="settings">${icon('sliders')}<span>Settings</span></button>
       <span class="ed-div"></span>
@@ -69,17 +66,22 @@ export function createEditor(app) {
   function fill(name) {
     const cfg = app.cfg;
     if (name === 'themes') {
-      $('.ed-themes').innerHTML = info.themes
-        .map(
-          (t) => `
-        <button class="ed-theme${t.id === cfg.theme ? ' on' : ''}" data-theme="${t.id}">
-          <span class="thumb" data-t="${t.id}"><i></i><i></i><i></i></span>
-          <span class="tname">${esc(t.name)}</span>
-          <span class="ttag">${esc(t.tagline)}</span>
-        </button>`,
-        )
-        .join('');
-      $('[data-k="pack"]').checked = usePack;
+      if (picker) picker.paint();
+      else
+        picker = wallPicker($('.ed-wp'), {
+          info,
+          getCfg: () => app.cfg,
+          commit: app.commit,
+          extra: () => `<label class="ed-check"><input type="checkbox" data-k="pack"${usePack ? ' checked' : ''} /> Also use the widget layout that suits this wallpaper</label>`,
+          onPick: async (w) => {
+            const layout = usePack ? await window.wall.preset(w.skin) : null;
+            app.commit((c) => {
+              c.wall = w.id;
+              c.theme = w.skin;
+              if (layout) c.widgets = layout;
+            });
+          },
+        });
     }
     if (name === 'widgets') {
       $('.ed-widgets').innerHTML = info.widgets
@@ -103,7 +105,7 @@ export function createEditor(app) {
           <small data-k="city-msg"></small>
         </label>
         <div class="ed-field"><span>Appearance</span>
-          <span class="ed-seg">${['auto', 'light', 'dark'].map((a) => `<button data-appearance="${a}" class="${(cfg.appearance || 'auto') === a ? 'on' : ''}">${a === 'auto' ? 'Auto (Windows)' : a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</span>
+          <span class="ed-seg">${[['sun', 'Auto (sunset)'], ['light', 'Day'], ['dark', 'Night'], ['auto', 'Windows']].map(([a, l]) => `<button data-appearance="${a}" class="${(cfg.appearance || 'auto') === a ? 'on' : ''}">${l}</button>`).join('')}</span>
         </div>
         <div class="ed-field"><span>Clock</span>
           <span class="ed-seg"><button data-clock="12" class="${!cfg.clock24 ? 'on' : ''}">12h</button><button data-clock="24" class="${cfg.clock24 ? 'on' : ''}">24h</button></span>
@@ -124,7 +126,6 @@ export function createEditor(app) {
     const t = e.target.closest('button');
     if (!t) return;
     if (t.dataset.open) return open(t.dataset.open);
-    if (t.dataset.theme) return setTheme(t.dataset.theme);
     if (t.dataset.type) return toggleWidget(t.dataset.type);
     if (t.dataset.appearance) {
       app.commit((c) => (c.appearance = t.dataset.appearance));
@@ -192,15 +193,6 @@ export function createEditor(app) {
     app.commit((c) => (c.city = city));
     msg.textContent = `Set to ${city.name}, ${city.country}`;
     input.value = `${city.name}, ${city.country}`;
-  }
-
-  async function setTheme(id) {
-    const layout = usePack ? await window.wall.preset(id) : null;
-    app.commit((c) => {
-      c.theme = id;
-      if (layout) c.widgets = layout;
-    });
-    fill('themes');
   }
 
   async function toggleWidget(type) {

@@ -1,0 +1,71 @@
+/* Wallpaper packs: the live 3D layer and the gallery (editor panel and Wallpapers popup).
+   Sizes are in em so the gallery scales with whichever surface holds it. */
+
+/* ------------------------------------------------------------ live wallpaper layer */
+
+.sc-gl { background: #000; }
+.sc-gl canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.gl-cap { position: absolute; left: 0; right: 0; bottom: 3vh; text-align: center; font: 600 1.4vh 'Inter Variable', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); pointer-events: none; }
+.sc-gl:not([data-kind='astro']) .gl-cap { display: none; }
+
+/* ------------------------------------------------------------ gallery */
+
+.wp { display: flex; flex-direction: column; gap: 1em; color: var(--ui-fg); font-family: var(--ui-font); min-width: 0; }
+/* zero specificity, so the component rules below win over the reset */
+:where(.wp) :where(button) { all: unset; cursor: pointer; box-sizing: border-box; }
+:where(.wp) :where(button):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; border-radius: 0.6em; }
+
+.wp-head { display: flex; align-items: center; justify-content: space-between; gap: 1em; flex-wrap: wrap; }
+.wp-title b { display: block; font-size: 1.25em; font-weight: 650; letter-spacing: -0.01em; }
+.wp-title small { font-size: 0.82em; color: var(--ui-fg-3); }
+
+.wp-seg { display: inline-flex; gap: 0.15em; padding: 0.2em; border-radius: 0.75em; background: var(--ui-tile, rgba(255, 255, 255, 0.07)); }
+.wp-seg button { padding: 0.42em 0.85em; border-radius: 0.6em; font-size: 0.84em; font-weight: 550; color: var(--ui-fg-2); transition: background 0.15s, color 0.15s; }
+.wp-seg button:hover { color: var(--ui-fg); }
+.wp-seg button.on { background: var(--ui-tile-2, rgba(255, 255, 255, 0.16)); color: var(--ui-fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
+
+.wp-packs { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.4em, 1fr)); gap: 0.8em 0.7em; padding: 0.1em; }
+.wp-pack { display: flex; flex-direction: column; gap: 0.1em; min-width: 0; }
+.wp-cover, .wp-img { display: block; width: 100%; aspect-ratio: 16 / 10; border-radius: 0.8em; background: #17171c center / cover no-repeat; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); position: relative; overflow: hidden; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s; }
+.wp-cover:not(.ready):not(.thumb)::after, .wp-img:not(.ready):not(.thumb)::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%) 0 0 / 200% 100%; animation: wp-shimmer 1.2s linear infinite; }
+@keyframes wp-shimmer { to { background-position: -200% 0; } }
+.wp-pack:hover .wp-cover, .wp-tile:hover .wp-img { transform: translateY(-2px); }
+.wp-pack.on .wp-cover { box-shadow: 0 0 0 2px var(--ui-accent); }
+.wp-pname { margin-top: 0.4em; font-size: 0.86em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-pcount { font-size: 0.72em; color: var(--ui-fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.wp-pack-head { display: flex; align-items: baseline; gap: 0.6em; flex-wrap: wrap; }
+.wp-pack-head b { font-size: 1.05em; font-weight: 650; }
+.wp-pack-head span { font-size: 0.85em; color: var(--ui-fg-2); }
+
+.wp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.2em, 1fr)); gap: 0.85em 0.75em; }
+.wp-tile { display: flex; flex-direction: column; gap: 0.4em; min-width: 0; }
+.wp-tile.on .wp-img { box-shadow: 0 0 0 2.5px var(--ui-accent); }
+.wp-name { display: flex; align-items: baseline; gap: 0.4em; font-size: 0.84em; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-name em { font-style: normal; font-size: 0.86em; font-weight: 450; color: var(--ui-fg-3); }
+
+.wp-make { display: grid; gap: 0.7em; padding: 0.9em 1em; border-radius: 0.9em; background: var(--ui-tile, rgba(255, 255, 255, 0.06)); }
+.wp-make-title { font-size: 0.9em; font-weight: 650; }
+.wp-row { display: flex; align-items: center; justify-content: space-between; gap: 1em; font-size: 0.9em; }
+.wp-row > span:first-child { color: var(--ui-fg-2); }
+.wp-colors { display: flex; gap: 0.55em; }
+.wp-swatch { position: relative; width: 2em; height: 2em; flex: none; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 1px 4px rgba(0, 0, 0, 0.3); overflow: hidden; cursor: pointer; }
+.wp-swatch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.wp-swatch:focus-within { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.wp-input, .wp-select { flex: 1; min-width: 0; max-width: 16em; box-sizing: border-box; padding: 0.45em 0.7em; border-radius: 0.6em; border: 1px solid var(--ui-line); background: var(--ui-tile-2, rgba(255, 255, 255, 0.1)); color: var(--ui-fg); font: inherit; font-size: 1em; }
+.wp-input:focus, .wp-select:focus { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+.wp-select option { color: #111; }
+
+.wp-foot { display: grid; gap: 0.6em; padding-top: 0.8em; border-top: 1px solid var(--ui-line); }
+.wp-foot .ed-check { font-size: 0.85em; }
+.wp-now { font-size: 0.8em; color: var(--ui-fg-3); }
+
+/* sakura had no gallery tile yet */
+.thumb[data-t='sakura'] { background: radial-gradient(circle at 26% 64%, #e2566f 11%, transparent 11.5%), linear-gradient(transparent 70%, #e9d3d9 70%), #fbeff1; }
+.thumb[data-t='sakura'] i { background: rgba(255, 255, 255, 0.7); box-shadow: 0 3px 8px -4px rgba(120, 40, 60, 0.4); }
+
+/* where the gallery lives */
+.ed-panel[data-panel='themes'] { width: min(64rem, 94vw); }
+.ed-panel[data-panel='themes'] .wp { font-size: 0.95rem; }
+.pop-wallpapers .panel { width: 680px; max-height: calc(100vh - 28px); overflow: auto; padding: 18px; box-sizing: border-box; scrollbar-width: thin; }
+.pop-wallpapers .wp { font-size: 13px; }

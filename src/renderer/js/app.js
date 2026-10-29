@@ -1,5 +1,6 @@
 import { WIDGETS, SHAPED } from './widgets.js';
 import { mountScene } from './scenes.js';
+import { mountWall } from './gl/engine.js';
 import { demoStore } from './demo.js';
 import { TINTS, FONTS } from './widgetform.js';
 import { mountAmbient, updateAmbient, confetti } from './ambient.js';
@@ -62,6 +63,11 @@ let editor = null;
 let bgPath = undefined;
 
 const theme = () => q.get('theme') || cfg.theme;
+// the wallpaper from a pack; the classic themes are wallpapers too (kind 'scene')
+const wallOf = () => {
+  const walls = info.walls || [];
+  return walls.find((w) => w.id === (q.get('wall') || cfg.wall)) || walls.find((w) => w.id === `classic-${theme()}`) || null;
+};
 
 // Light / dark: 'auto' follows Windows (and flips live when you toggle dark mode).
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
@@ -106,11 +112,15 @@ async function applyLook() {
   backdrop.style.setProperty('--dim', String(cfg.dim ?? 0.25));
   applyAccent();
 
-  const key = `${theme()}|${root.dataset.bg}|${root.dataset.appearance}|${cfg.planet || ''}`;
+  const wall = wallOf();
+  const classic = !wall || wall.kind === 'scene';
+  // live wallpapers ease into night on their own; the CSS scenes are rebuilt for it
+  const key = `${wall?.id ?? theme()}|${root.dataset.bg}|${classic ? root.dataset.appearance : ''}`;
   if (key !== sceneKey) {
     sceneKey = key;
     scene?.destroy();
-    scene = root.dataset.bg === 'image' ? null : mountScene(sceneEl, theme(), ctx());
+    if (root.dataset.bg === 'image') scene = null;
+    else scene = classic ? mountScene(sceneEl, wall?.scene || theme(), ctx()) : mountWall(sceneEl, wall, ctx());
     if (!scene) sceneEl.innerHTML = '';
   } else {
     scene?.update(ctx());
@@ -324,7 +334,8 @@ let gitKey = '';
 let dockKey = '';
 async function pollWeather(force = false) {
   // weather is also needed for rain/snow on the desktop itself
-  if (!has('weather') && theme() !== 'weather' && cfg.appearance !== 'sun' && !(AMBIENT && cfg.weatherFx !== 'off')) return;
+  // weather also tells the Earth wallpaper where you are
+  if (!has('weather') && theme() !== 'weather' && cfg.appearance !== 'sun' && wallOf()?.kind !== 'astro' && !(AMBIENT && cfg.weatherFx !== 'off')) return;
   store.weather = await window.wall.weather(force);
   if (store.weather?.ok) sunTimes = { rise: store.weather.sunrise, set: store.weather.sunset };
   if (cfg.appearance === 'sun') applyLook();

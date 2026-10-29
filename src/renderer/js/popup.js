@@ -6,6 +6,7 @@ import { WIDGETS, esc } from './widgets.js';
 import { icon, weatherIcon } from './icons.js';
 import { renderWidgetForm, TINTS, FONTS } from './widgetform.js';
 import { fileUrl } from './widgets.js';
+import { wallPicker } from './wallpicker.js';
 
 let cfg;
 let info;
@@ -44,7 +45,7 @@ export function start(env) {
     host = document.createElement('div');
     host.className = `pop pop-${view}`;
     chrome.replaceChildren(host);
-    const render = { note, todo, control, calendar, menu, settings, widget: widgetEdit, weather: weatherPanel, wrapped: wrappedView, projects: projectsView, chat: chatView, update: updateView }[view];
+    const render = { note, todo, control, calendar, menu, settings, wallpapers: wallpapersView, widget: widgetEdit, weather: weatherPanel, wrapped: wrappedView, projects: projectsView, chat: chatView, update: updateView }[view];
     if (!render) return close();
     render(host, id, Number(scale) || 1);
     await fit();
@@ -571,28 +572,25 @@ function settings(root) {
   cleanup.push(() => window.removeEventListener('keydown', onKey, true));
 
   const paint = () => {
-    const theme = info.themes.find((t) => t.id === cfg.theme);
+    const wall = info.walls?.find((w) => w.id === cfg.wall);
+    const pack = info.packs?.find((p) => p.id === wall?.pack);
     const shown = QUICK_WIDGETS.filter(has).length;
     root.innerHTML = `
       <div class="panel sm">
         <div class="sm-head">
-          <div><b>Wallpaper</b><small>${esc(theme?.name || '')}</small></div>
+          <div><b>Wallpaper</b><small>${esc(wall ? `${wall.name} · ${pack?.name || ''}` : '')}</small></div>
           <button class="sm-pill" data-run="edit" title="${fmt(info.hotkey)}">${icon('grid')}Rearrange</button>
         </div>
 
-        <div class="sm-themes">${info.themes
-          .map((t) => `<button class="sm-theme${t.id === cfg.theme ? ' on' : ''}" data-theme="${t.id}" title="${esc(t.name)}"><span>${t.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span></button>`)
-          .join('')}</div>
-
         <div class="sm-card">
-          <div class="sm-row"><span>Appearance</span>${seg('appearance', cfg.appearance || 'auto', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark'], ['sun', 'Sun']])}</div>
+          <button class="sm-row" data-pop="wallpapers"><span>Wallpapers</span><em>${info.packs?.length || 0} packs</em>${icon('chevron', 'sm-chev')}</button>
+          <div class="sm-row"><span>Day &amp; night</span>${seg('appearance', cfg.appearance || 'auto', [['sun', 'Auto'], ['light', 'Day'], ['dark', 'Night'], ['auto', 'System']])}</div>
           <div class="sm-row"><span>Accent</span><span class="sm-dots"><button data-accent="" class="auto${!cfg.accent ? ' on' : ''}" title="Theme color"></button>${Object.entries(TINTS)
             .filter(([k]) => !['graphite', 'white'].includes(k))
             .map(([k, c]) => `<button data-accent="${k}" class="${cfg.accent === k ? 'on' : ''}" style="--c:${c}" title="${k}"></button>`)
             .join('')}<button data-accent="song" class="song${cfg.accent === 'song' ? ' on' : ''}" title="Follow the album art of what's playing">${icon('music')}</button><label class="sm-anycolor${/^#/.test(cfg.accent || '') ? ' on' : ''}" title="Any color" style="${/^#/.test(cfg.accent || '') ? `--c:${cfg.accent}` : ''}"><input type="color" data-anyaccent value="${/^#/.test(cfg.accent || '') ? cfg.accent : '#ff6b6b'}" /></label></span></div>
           <div class="sm-row"><span>Background</span>${seg('bgmode', cfg.background ? 'photo' : 'theme', [['theme', 'Theme'], ['photo', cfg.background ? 'Change…' : 'Photo…']])}</div>
           ${cfg.background ? `<div class="sm-row"><span class="sm-thumb" style="background-image:url('${fileUrl(cfg.background).replace(/'/g, '%27')}')"></span><span>Dim</span><input type="range" min="0" max="0.8" step="0.05" data-dim value="${cfg.dim ?? 0.25}" /></div>` : ''}
-          ${cfg.theme === 'astro' ? `<div class="sm-row"><span>Planet</span>${seg('planet', cfg.planet || 'moon', [['moon', 'Moon'], ['mars', 'Mars'], ['earth', 'Earth']])}</div>` : ''}
         </div>
 
         <div class="sm-card">
@@ -671,6 +669,7 @@ function settings(root) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.run) return window.wall.action(b.dataset.run);
+    if (b.dataset.pop) return window.wall.popup(b.dataset.pop, { y: 34 });
     if (b.dataset.rec) {
       rec = rec === b.dataset.rec ? '' : b.dataset.rec;
       paint();
@@ -805,47 +804,45 @@ function calendar(root) {
 
 function menu(root, id) {
   const fmt = (k) => (k || '').replace('CommandOrControl', 'Ctrl');
-  const themes = () => `
-    <div class="panel menu">
-      <div class="menu-title">Themes</div>
-      ${info.themes.map((t) => `<button data-theme="${t.id}" class="${t.id === cfg.theme ? 'on' : ''}"><span class="sw">${t.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span>${esc(t.name)}${t.id === cfg.theme ? icon('check2', 'tick') : ''}</button>`).join('')}
-      <hr />
-      <div class="menu-title">Appearance</div>
-      <div class="menu-seg">${['auto', 'light', 'dark'].map((a) => `<button data-appearance="${a}" class="${(cfg.appearance || 'auto') === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div>
-    </div>`;
   const main = () => `
     <div class="panel menu">
       <button data-run="spotlight">${icon('search')}Search<kbd>${fmt(info.spotlightKey)}</kbd></button>
       <button data-do="note">${icon('note')}New note</button>
       <button data-run="edit">${icon('grid')}Rearrange<kbd>${fmt(info.hotkey)}</kbd></button>
+      <button data-pop="wallpapers">${icon('palette')}Wallpapers</button>
       <button data-pop="settings">${icon('gear')}Settings</button>
       <hr />
       <button data-run="restart">${icon('refresh')}Restart wallpaper</button>
       <button data-run="quit">${icon('power')}Quit ${esc(info.brand?.name || '')}</button>
     </div>`;
-  root.innerHTML = id === 'themes' ? themes() : main();
+  if (id === 'themes') return wallpapersView(root);
+  root.innerHTML = main();
   root.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.run) return window.wall.action(b.dataset.run);
     if (b.dataset.pop) return window.wall.popup(b.dataset.pop, { y: 34 });
-    if (b.dataset.theme || b.dataset.appearance) {
-      if (b.dataset.theme) cfg.theme = b.dataset.theme;
-      if (b.dataset.appearance) cfg.appearance = b.dataset.appearance;
-      save();
-      root.innerHTML = themes();
-      return fit();
-    }
-    if (b.dataset.do === 'themes') {
-      root.innerHTML = themes();
-      return fit();
-    }
     if (b.dataset.do === 'note') {
       const w = await window.wall.make('note', 0.42 + Math.random() * 0.1, 0.32 + Math.random() * 0.1, { color: info.noteColors[cfg.widgets.filter((x) => x.type === 'note').length % info.noteColors.length] });
       cfg.widgets.push(w);
       save();
       window.wall.action('open-widget', w.id);
     }
+  });
+}
+
+// ---------------------------------------------------------------- wallpaper packs
+
+function wallpapersView(root) {
+  root.innerHTML = '<div class="panel"></div>';
+  wallPicker(root.firstElementChild, {
+    info,
+    getCfg: () => cfg,
+    commit: (fn) => {
+      fn(cfg);
+      save();
+    },
+    onRender: () => fit(),
   });
 }
 

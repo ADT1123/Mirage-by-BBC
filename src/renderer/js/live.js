@@ -66,8 +66,9 @@ export function enableLive(app) {
       case 'projects':
         return window.wall.popup('projects', { x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
       case 'menu':
+        return window.wall.popup('menu', { x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
       case 'themes':
-        return window.wall.popup('menu', { id: act === 'themes' ? 'themes' : '', x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
+        return window.wall.popup('wallpapers', { x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
       case 'weather': {
         const box = (el.querySelector('.weather') || el).getBoundingClientRect();
         const right = box.right + 12;

@@ -6,11 +6,20 @@ import path from 'path';
 import config from '../src/shared/config.cjs';
 import brand from '../src/shared/brand.cjs';
 import themes from '../src/shared/themes.cjs';
+import packs from '../src/shared/packs.cjs';
 import widgets from '../src/shared/widgets.cjs';
 import * as control from './control.mjs';
 import ai from '../src/main/ai.cjs';
 
 const { THEMES, byId } = themes;
+const { PACKS, WALLS, wallById, wallsIn, wallForTheme } = packs;
+// /theme keeps its old meaning: the whole look, wallpaper and widget style together
+const withTheme = (c, id) => ((c.theme = id), (c.wall = wallForTheme(id, c.planet)), c);
+// a wallpaper by id ("silk-dusk") or by name ("silk dusk", "Prism Glass")
+const findWall = (words) => {
+  const q = words.join(' ').toLowerCase().trim();
+  return wallById(q.replace(/\s+/g, '-')) || WALLS.find((w) => w.name.toLowerCase() === q || `${w.pack} ${w.name}`.toLowerCase() === q);
+};
 const { WIDGETS, NOTE_COLORS, byType, make, presetLayout } = widgets;
 
 const SKIES = ['auto', 'clear', 'partly', 'cloudy', 'rain', 'snow', 'storm', 'fog'];
@@ -79,7 +88,8 @@ export const COMMANDS = [
       const cfg = config.load();
       const t = byId(cfg.theme);
       const lines = [
-        `theme     ${t.name}`,
+        `wallpaper ${wallById(cfg.wall)?.name || cfg.wall}`,
+        `style     ${t.name}`,
         `widgets   ${cfg.widgets.map((w) => w.type).join(', ') || 'none'}`,
         `city      ${cfg.city ? `${cfg.city.name}, ${cfg.city.country}` : 'auto (from your network)'}`,
         `clock     ${cfg.clock24 ? '24h' : '12h'} · motion ${cfg.motion === false ? 'off' : 'on'}`,
@@ -111,7 +121,7 @@ export const COMMANDS = [
       if (!name) return { ok: true, ui: 'theme-picker' };
       const t = byId(name);
       if (!t) return fail(`No theme called "${name}"`, [`Try one of: ${THEMES.map((x) => x.id).join(', ')}`]);
-      const extra = await change((c) => ((c.theme = t.id), c));
+      const extra = await change((c) => withTheme(c, t.id));
       return ok(`Theme set to ${t.name}`, [t.tagline], extra);
     },
   },
@@ -131,8 +141,29 @@ export const COMMANDS = [
     async run([name]) {
       const t = byId(name);
       if (!t) return fail('Which pack?', [`Try one of: ${THEMES.map((x) => x.id).join(', ')}`]);
-      const extra = await change((c) => ((c.theme = t.id), (c.widgets = presetLayout(t.id)), c));
+      const extra = await change((c) => ((c.widgets = presetLayout(t.id)), withTheme(c, t.id)));
       return ok(`${t.name} pack applied`, ['Theme and layout both switched'], extra);
+    },
+  },
+  {
+    name: 'wall',
+    args: '<wallpaper>',
+    desc: 'Switch wallpaper (see /walls)',
+    complete: () => WALLS.map((w) => ({ value: w.id, desc: `${PACKS.find((p) => p.id === w.pack)?.name} · ${w.name}` })),
+    async run(words) {
+      const w = findWall(words);
+      if (!w) return fail(words.length ? `No wallpaper called "${words.join(' ')}"` : 'Which wallpaper?', ['Run /walls to see every pack']);
+      const extra = await change((c) => ((c.wall = w.id), (c.theme = w.skin), c));
+      return ok(`Wallpaper set to ${w.name}`, [PACKS.find((p) => p.id === w.pack)?.desc || ''], extra);
+    },
+  },
+  {
+    name: 'walls',
+    desc: `List the ${PACKS.length} wallpaper packs`,
+    async run() {
+      const cur = config.load().wall;
+      const lines = PACKS.flatMap((p) => [`${p.name}  ${p.desc}`, ...wallsIn(p.id).map((w) => `  ${w.id === cur ? '●' : '○'} ${w.id.padEnd(16)} ${w.name}`)]);
+      return ok(`${WALLS.length} wallpapers in ${PACKS.length} packs`, lines, { hint: 'Use /wall <name>, e.g. /wall prism glass' });
     },
   },
   {
@@ -407,7 +438,7 @@ export const COMMANDS = [
     complete: () => ['moon', 'mars', 'earth'].map((v) => ({ value: v, desc: '' })),
     async run([v]) {
       if (!['moon', 'mars', 'earth'].includes(v)) return fail('Use /planet moon, mars or earth');
-      const extra = await change((c) => ((c.planet = v), (c.theme = 'astro'), c));
+      const extra = await change((c) => ((c.planet = v), (c.theme = 'astro'), (c.wall = `astro-${v}`), c));
       return ok(`Astronomy: ${v[0].toUpperCase() + v.slice(1)}`, [], extra);
     },
   },
