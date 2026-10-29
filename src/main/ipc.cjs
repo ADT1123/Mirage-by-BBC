@@ -9,6 +9,7 @@ const stocks = require('./stocks.cjs');
 const memories = require('./memories.cjs');
 const native = require('./native.cjs');
 const { THEMES } = require('../shared/themes.cjs');
+const { PACKS, WALLS } = require('../shared/packs.cjs');
 const brand = require('../shared/brand.cjs');
 const { WIDGETS, NOTE_COLORS, presetLayout, make } = require('../shared/widgets.cjs');
 
@@ -52,6 +53,8 @@ function register(hooks = {}) {
     spotlightKey: hooks.spotlightKey?.() || null,
     user: firstName(),
     themes: THEMES,
+    packs: PACKS,
+    walls: WALLS,
     widgets: WIDGETS,
     noteColors: NOTE_COLORS,
   }));

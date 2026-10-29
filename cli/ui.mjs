@@ -4,6 +4,9 @@ import os from 'os';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Static, Text, render, useApp, useInput, useWindowSize } from 'ink';
 import { COMMANDS, THEMES, WIDGETS, brand, byId, config, execute, find } from './commands.mjs';
+import packs from '../src/shared/packs.cjs';
+
+const { wallForTheme } = packs;
 import { banner } from './logo.mjs';
 import * as control from './control.mjs';
 
@@ -128,18 +131,20 @@ function Suggestions({ items, index }) {
 // ------------------------------------------------------------------ pickers
 
 function ThemePicker({ onDone }) {
-  const original = useRef(config.load().theme);
+  const start = config.load();
+  const original = useRef(start.theme);
+  const originalWall = useRef(start.wall);
   const [i, setI] = useState(Math.max(0, THEMES.findIndex((t) => t.id === original.current)));
   const preview = (n) => {
     setI(n);
-    config.update((c) => ((c.theme = THEMES[n].id), c));
+    config.update((c) => ((c.theme = THEMES[n].id), (c.wall = wallForTheme(THEMES[n].id, c.planet)), c));
   };
   useInput((input, key) => {
     if (key.upArrow) preview((i - 1 + THEMES.length) % THEMES.length);
     else if (key.downArrow) preview((i + 1) % THEMES.length);
     else if (key.return) onDone({ ok: true, title: `Theme set to ${THEMES[i].name}`, lines: [THEMES[i].tagline] });
     else if (key.escape) {
-      config.update((c) => ((c.theme = original.current), c));
+      config.update((c) => ((c.theme = original.current), (c.wall = originalWall.current), c));
       onDone({ ok: true, title: 'Kept your theme', lines: [byId(original.current).name] });
     }
   });

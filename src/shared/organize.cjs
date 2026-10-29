@@ -3,6 +3,7 @@
 
 const { make, NOTE_COLORS } = require('./widgets.cjs');
 const { byId } = require('./themes.cjs');
+const { wallForTheme } = require('./packs.cjs');
 
 // a free-ish spot for a new widget so it doesn't land on top of another
 function spot(cfg) {
@@ -131,6 +132,7 @@ function apply(cfg, actions = []) {
       case 'set_theme':
         if (byId(text)) {
           cfg.theme = text;
+          cfg.wall = wallForTheme(text, cfg.planet);
           done.push(`Theme: ${byId(text).name}`);
         }
         break;

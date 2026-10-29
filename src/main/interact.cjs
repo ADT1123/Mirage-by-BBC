@@ -15,7 +15,7 @@ const linux = process.platform === 'linux' ? require('./linux.cjs') : null;
 const config = require('../shared/config.cjs');
 
 const PAGE = path.join(__dirname, '..', 'renderer', 'index.html');
-const SIZES = { control: [380, 560], calendar: [330, 380], menu: [320, 440], settings: [380, 680], widget: [360, 640], weather: [440, 640], projects: [340, 480], wrapped: [400, 760], update: [360, 300], chat: [380, 560] };
+const SIZES = { control: [380, 560], calendar: [330, 380], menu: [320, 440], settings: [380, 680], wallpapers: [710, 680], widget: [360, 640], weather: [440, 640], projects: [340, 480], wrapped: [400, 760], update: [360, 300], chat: [380, 560] };
 
 let hooks = null;
 const t0 = Date.now();

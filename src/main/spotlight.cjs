@@ -18,6 +18,7 @@ function shortcutTarget(lnk) {
 }
 const config = require('../shared/config.cjs');
 const { THEMES } = require('../shared/themes.cjs');
+const { WALLS, packById } = require('../shared/packs.cjs');
 
 const HOME = os.homedir();
 const USAGE_FILE = path.join(config.DIR, 'spotlight.json');
@@ -186,7 +187,8 @@ function actions() {
     { title: 'Restart wallpaper', action: 'restart', words: 'restart reload refresh wallpaper' },
     { title: 'Now Playing', action: 'player', words: 'music player song history' },
     { title: 'Take a screenshot', action: 'screenshot', words: 'screenshot snip capture' },
-    ...THEMES.map((t) => ({ title: `Theme: ${t.name}`, action: 'theme', arg: t.id, words: `theme ${t.tagline}` })),
+    ...WALLS.map((w) => ({ title: `Wallpaper: ${w.name}`, action: 'wall', arg: w.id, words: `wallpaper theme ${packById(w.pack)?.name || ''} ${packById(w.pack)?.desc || ''}` })),
+    ...THEMES.map((t) => ({ title: `Widget style: ${t.name}`, action: 'theme', arg: t.id, words: `theme style ${t.tagline}` })),
   ];
   return list.map((a) => ({ kind: 'action', id: `act:${a.action}:${a.arg || ''}`, title: a.title, subtitle: 'Wallpaper', target: a.action, arg: a.arg, key: `${a.title} ${a.words}`.toLowerCase() }));
 }

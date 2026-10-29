@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { presetLayout } = require('./widgets.cjs');
 const { byId } = require('./themes.cjs');
+const { wallById, wallForTheme, CUSTOM } = require('./packs.cjs');
 const brand = require('./brand.cjs');
 
 const DIR = process.env.WALL_HOME || path.join(os.homedir(), `.${brand.slug}`);
@@ -15,10 +16,12 @@ const PORT = Number(process.env.WALL_PORT) || 47391;
 function defaults() {
   return {
     version: 1,
-    theme: 'midnight',
+    theme: 'midnight', // the widget style; the wallpaper picks one when you choose it
+    wall: 'silk-dusk', // the wallpaper, from a pack in packs.cjs
+    wallCustom: structuredClone(CUSTOM), // your own Color and Emoji wallpapers
     name: '',
     clock24: false,
-    appearance: 'auto', // 'auto' follows Windows light/dark; or 'light' / 'dark'
+    appearance: 'sun', // day & night: 'sun' (sunrise to sunset), 'auto' (follows Windows), 'light', 'dark'
     visualizer: true, // bars in the Now Playing view
     planet: 'moon', // Astronomy theme: moon | mars | earth
     weatherFx: 'auto', // rain/snow over the desktop when it's really happening: auto | off | rain | snow | storm
@@ -47,6 +50,8 @@ function load() {
     const raw = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     const cfg = { ...defaults(), ...raw };
     if (!byId(cfg.theme)) cfg.theme = 'midnight'; // includes themes that were retired
+    if (raw.wall === undefined || !wallById(cfg.wall)) cfg.wall = wallForTheme(cfg.theme, cfg.planet);
+    cfg.wallCustom = { color: { ...CUSTOM.color, ...raw.wallCustom?.color }, emoji: { ...CUSTOM.emoji, ...raw.wallCustom?.emoji } };
     if (!Array.isArray(cfg.widgets)) cfg.widgets = presetLayout(cfg.theme);
     return cfg;
   } catch {

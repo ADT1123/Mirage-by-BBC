@@ -8,6 +8,7 @@ const { app, BrowserWindow, screen, Tray, Menu, nativeImage, globalShortcut, ipc
 const config = require('../shared/config.cjs');
 const brand = require('../shared/brand.cjs');
 const { THEMES } = require('../shared/themes.cjs');
+const { PACKS, wallsIn, wallById } = require('../shared/packs.cjs');
 const { presetLayout, make } = require('../shared/widgets.cjs');
 const desktop = require('./desktop.cjs');
 const ipc = require('./ipc.cjs');
@@ -546,6 +547,8 @@ function runSpotlightAction(name, arg) {
       return openEditor();
     case 'theme':
       return setTheme(arg, false);
+    case 'wall':
+      return setWall(arg);
     case 'note-add':
     {
       let id;
@@ -612,6 +615,16 @@ function watchConfig() {
   });
 }
 
+function setWall(id) {
+  const w = wallById(id);
+  if (!w) return;
+  config.update((c) => {
+    c.wall = w.id;
+    c.theme = w.skin;
+    return c;
+  });
+}
+
 function setTheme(id, withLayout) {
   config.update((c) => {
     c.theme = id;
@@ -640,7 +653,14 @@ function refreshTray() {
     { label: 'Weekly Wrapped', click: () => interact.action('wrapped') },
     updater.status().available ? { label: `Update available (${updater.status().behind} new)…`, click: () => interact.action('update') } : { label: 'Check for updates', click: () => interact.action('update') },
     {
-      label: 'Theme',
+      label: 'Wallpaper',
+      submenu: PACKS.map((p) => ({
+        label: p.name,
+        submenu: wallsIn(p.id).map((w) => ({ label: w.name, type: 'radio', checked: cfg.wall === w.id, click: () => setWall(w.id) })),
+      })),
+    },
+    {
+      label: 'Widget style',
       submenu: THEMES.map((t) => ({
         label: t.name,
         type: 'radio',
