@@ -3,54 +3,6 @@
    Each: tokens → scene → its opposite appearance.
    ===================================================================== */
 
-/* -------------------------------------------------- Pastel */
-[data-theme='pastel'] {
-  --bg: #f6f1fb;
-  --fg: #2d2640;
-  --fg-2: rgba(45, 38, 64, 0.66);
-  --fg-3: rgba(45, 38, 64, 0.44);
-  --hair: rgba(45, 38, 64, 0.08);
-  --accent: #8b7cf6;
-  --accent-2: #f39bb4;
-  --accent-3: #6cc9bd;
-  --card-bg: rgba(255, 255, 255, 0.62);
-  --card-border: rgba(255, 255, 255, 0.85);
-  --card-radius: 1.8rem;
-  --card-shadow: 0 1.2rem 2.8rem -1.6rem rgba(120, 90, 170, 0.35);
-  --card-blur: 22px;
-  --heat-0: rgba(45, 38, 64, 0.06);
-  --heat-1: #e3dbfb;
-  --heat-2: #c6b6f7;
-  --heat-3: #a290f2;
-  --heat-4: #7d68ea;
-  --track: rgba(45, 38, 64, 0.08);
-  --clock-weight: 300;
-  --text-shadow: none;
-  --mb-bg: rgba(255, 255, 255, 0.55);
-}
-.sc-pastel { background: #f6f1fb; }
-.sc-pastel .pb { position: absolute; border-radius: 50%; will-change: transform; }
-.sc-pastel .p1 { width: 70vmax; height: 70vmax; left: -18vmax; top: -30vmax; background: radial-gradient(closest-side, #d9cdfb, transparent); animation: drift-a 30s ease-in-out infinite alternate; }
-.sc-pastel .p2 { width: 60vmax; height: 60vmax; right: -15vmax; top: -20vmax; background: radial-gradient(closest-side, #ffd6c7, transparent); animation: drift-b 36s ease-in-out infinite alternate; }
-.sc-pastel .p3 { width: 65vmax; height: 65vmax; left: 20vmax; bottom: -40vmax; background: radial-gradient(closest-side, #c8f0e6, transparent); animation: drift-c 40s ease-in-out infinite alternate; }
-.sc-pastel .p4 { width: 40vmax; height: 40vmax; right: 5vmax; bottom: -10vmax; background: radial-gradient(closest-side, #ffd8ea, transparent); animation: drift-a 34s ease-in-out infinite alternate-reverse; }
-.sc-pastel .grain { opacity: 0.08; }
-[data-theme='pastel'][data-appearance='dark'] {
-  --bg: #1d1929;
-  --fg: #f3eefe;
-  --fg-2: rgba(243, 238, 254, 0.7);
-  --fg-3: rgba(243, 238, 254, 0.45);
-  --hair: rgba(243, 238, 254, 0.08);
-  --card-bg: rgba(255, 255, 255, 0.07);
-  --card-border: rgba(255, 255, 255, 0.1);
-  --card-shadow: 0 1.2rem 2.8rem -1.6rem rgba(0, 0, 0, 0.5);
-  --heat-0: rgba(243, 238, 254, 0.07);
-  --track: rgba(243, 238, 254, 0.1);
-  --mb-bg: rgba(29, 25, 41, 0.6);
-}
-[data-appearance='dark'] .sc-pastel { background: #1d1929; }
-[data-appearance='dark'] .sc-pastel .pb { opacity: 0.32; }
-
 /* -------------------------------------------------- Sakura */
 [data-theme='sakura'] {
   --font-display: 'Instrument Serif', Georgia, serif;
@@ -115,70 +67,6 @@
 [data-appearance='dark'] .sc-sakura .fuji .snow { fill: #d9cfe0; }
 [data-appearance='dark'] .sc-sakura .wood { stroke: #120c14; }
 
-/* -------------------------------------------------- Orbit */
-[data-theme='orbit'] {
-  --bg: #0a0c18;
-  --fg: #eef0ff;
-  --fg-2: rgba(238, 240, 255, 0.66);
-  --fg-3: rgba(238, 240, 255, 0.4);
-  --hair: rgba(238, 240, 255, 0.08);
-  --accent: #ffcc66;
-  --accent-2: #7aa2ff;
-  --accent-3: #ff8f7a;
-  --card-bg: rgba(16, 19, 38, 0.7);
-  --card-border: rgba(238, 240, 255, 0.08);
-  --card-shadow: 0 1.4rem 3rem -1.6rem rgba(0, 0, 0, 0.6);
-  --card-blur: 14px;
-  --heat-0: rgba(238, 240, 255, 0.06);
-  --heat-1: #3a3423;
-  --heat-2: #7a6430;
-  --heat-3: #c49a45;
-  --heat-4: #ffcc66;
-  --track: rgba(238, 240, 255, 0.08);
-  --clock-weight: 200;
-  --clock-tracking: 0.02em;
-  --mb-bg: rgba(10, 12, 24, 0.6);
-}
-.sc-orbit { background: #0a0c18; }
-.sc-orbit .stars { position: absolute; width: 1px; height: 1px; opacity: 0.7; }
-.sc-orbit .system { position: absolute; left: 74vw; top: 58vh; width: 0; height: 0; }
-.sc-orbit .sun { position: absolute; left: -5vh; top: -5vh; width: 10vh; height: 10vh; border-radius: 50%; background: #ffcc66; box-shadow: 0 0 5vh rgba(255, 204, 102, 0.45); }
-.sc-orbit .ring { position: absolute; border-radius: 50%; border: 1px solid rgba(238, 240, 255, 0.1); animation: orbit linear infinite; }
-.sc-orbit .ring .planet { position: absolute; top: 50%; left: -0.9vh; width: 1.8vh; height: 1.8vh; margin-top: -0.9vh; border-radius: 50%; }
-.sc-orbit .r1 { width: 22vh; height: 22vh; left: -11vh; top: -11vh; animation-duration: 18s; }
-.sc-orbit .r1 .planet { background: #b9b2a6; width: 1.2vh; height: 1.2vh; left: -0.6vh; margin-top: -0.6vh; }
-.sc-orbit .r2 { width: 36vh; height: 36vh; left: -18vh; top: -18vh; animation-duration: 32s; }
-.sc-orbit .r2 .planet { background: #ff8f7a; }
-.sc-orbit .r3 { width: 52vh; height: 52vh; left: -26vh; top: -26vh; animation-duration: 50s; }
-.sc-orbit .r3 .planet { background: #7aa2ff; width: 2.2vh; height: 2.2vh; left: -1.1vh; margin-top: -1.1vh; }
-.sc-orbit .r4 { width: 72vh; height: 72vh; left: -36vh; top: -36vh; animation-duration: 80s; }
-.sc-orbit .r4 .planet { background: #e8c48a; width: 3vh; height: 3vh; left: -1.5vh; margin-top: -1.5vh; box-shadow: 0 0 0 0.5vh rgba(232, 196, 138, 0.25); }
-.sc-orbit .r5 { width: 96vh; height: 96vh; left: -48vh; top: -48vh; animation-duration: 130s; }
-.sc-orbit .r5 .planet { background: #8fd3e8; }
-@keyframes orbit { to { transform: rotate(360deg); } }
-[data-theme='orbit'][data-appearance='light'] {
-  --bg: #f4f1ea;
-  --fg: #1c1b2e;
-  --fg-2: rgba(28, 27, 46, 0.66);
-  --fg-3: rgba(28, 27, 46, 0.42);
-  --hair: rgba(28, 27, 46, 0.08);
-  --accent: #e09a1f;
-  --card-bg: rgba(255, 255, 255, 0.7);
-  --card-border: rgba(28, 27, 46, 0.08);
-  --card-shadow: 0 1.2rem 2.6rem -1.8rem rgba(60, 50, 30, 0.35);
-  --heat-0: rgba(28, 27, 46, 0.06);
-  --heat-1: #f6e2b6;
-  --heat-2: #f0c46e;
-  --heat-3: #e09a1f;
-  --heat-4: #a86a05;
-  --track: rgba(28, 27, 46, 0.08);
-  --mb-bg: rgba(244, 241, 234, 0.8);
-}
-[data-appearance='light'] .sc-orbit { background: #f4f1ea; }
-[data-appearance='light'] .sc-orbit .stars { display: none; }
-[data-appearance='light'] .sc-orbit .ring { border-color: rgba(28, 27, 46, 0.14); }
-[data-appearance='light'] .sc-orbit .sun { background: #f0b445; box-shadow: none; }
-
 /* -------------------------------------------------- editor thumbnails */
 .thumb[data-t='pastel'] { background: radial-gradient(circle at 25% 25%, #d9cdfb, transparent 50%), radial-gradient(circle at 80% 30%, #ffd6c7, transparent 45%), radial-gradient(circle at 60% 90%, #c8f0e6, transparent 50%), #f6f1fb; }
 .thumb[data-t='pastel'] i { background: rgba(255, 255, 255, 0.7); border-radius: 0.4rem; }
@@ -190,139 +78,6 @@
 .thumb[data-t='orbit'] i { background: rgba(16, 19, 38, 0.8); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
 .thumb[data-t='forest'] { background: linear-gradient(transparent 55%, #23394a 55% 70%, #101d24 70%), #1b2b36; }
 .thumb[data-t='forest'] i { background: rgba(18, 30, 32, 0.75); box-shadow: inset 0 0 0 1px rgba(233, 242, 230, 0.12); }
-
-/* -------------------------------------------------- Ocean (moonlit sea, smooth layered waves) */
-[data-theme='ocean'] {
-  --bg: #061526;
-  --fg: #eaf6ff;
-  --fg-2: rgba(234, 246, 255, 0.74);
-  --fg-3: rgba(234, 246, 255, 0.48);
-  --hair: rgba(150, 215, 255, 0.12);
-  --accent: #5cc8ff;
-  --accent-2: #7ef0d0;
-  --accent-3: #a9bdff;
-  --card-bg: rgba(10, 32, 54, 0.5);
-  --card-border: rgba(150, 215, 255, 0.16);
-  --card-shadow: 0 1.4rem 3rem -1.6rem rgba(0, 0, 0, 0.55);
-  --card-blur: 22px;
-  --heat-0: rgba(234, 246, 255, 0.07);
-  --heat-1: #154766;
-  --heat-2: #1f7aa8;
-  --heat-3: #39aee0;
-  --heat-4: #7ef0d0;
-  --track: rgba(234, 246, 255, 0.1);
-  --clock-weight: 250;
-  --mb-bg: rgba(6, 21, 38, 0.55);
-}
-.sc-ocean { background: linear-gradient(180deg, #040d1c 0%, #0a2340 38%, #164a6e 52%, #0b2c48 53%, #031424 100%); }
-.sc-ocean .stars { position: absolute; width: 1px; height: 1px; opacity: 0.6; }
-.sc-ocean .moon { position: absolute; left: 68vw; top: 14vh; width: 11vh; height: 11vh; border-radius: 50%; background: radial-gradient(circle at 38% 35%, #ffffff, #e6eef5 55%, #c7d4df); box-shadow: 0 0 6vh 1vh rgba(220, 235, 250, 0.28), 0 0 20vh 6vh rgba(120, 170, 220, 0.12); }
-.sc-ocean .glint { position: absolute; left: calc(68vw + 5.5vh - 7vh); top: 53vh; width: 14vh; height: 40vh; background: repeating-linear-gradient(180deg, rgba(235, 245, 255, 0.5) 0 0.25vh, transparent 0.25vh 1.4vh); mask-image: radial-gradient(50% 100% at 50% 0%, #000, transparent); animation: glint 3.5s ease-in-out infinite alternate; }
-@keyframes glint { to { opacity: 0.45; transform: scaleX(1.25); } }
-.sc-ocean .waves { position: absolute; left: 0; bottom: 0; width: 100%; height: 47vh; overflow: hidden; }
-.sc-ocean .wl { animation: wave-run linear infinite; }
-.sc-ocean .wl path { opacity: 0.92; }
-.sc-ocean .l1 { animation-duration: 60s; } .sc-ocean .l2 { animation-duration: 46s; animation-direction: reverse; } .sc-ocean .l3 { animation-duration: 36s; }
-.sc-ocean .l4 { animation-duration: 28s; animation-direction: reverse; } .sc-ocean .l5 { animation-duration: 22s; }
-.ws1a { stop-color: #1d5a82; } .ws1b { stop-color: #0d3150; }
-.ws2a { stop-color: #17507a; } .ws2b { stop-color: #0a2a46; }
-.ws3a { stop-color: #11446a; } .ws3b { stop-color: #08223b; }
-.ws4a { stop-color: #0c3758; } .ws4b { stop-color: #061a2f; }
-.ws5a { stop-color: #082b47; } .ws5b { stop-color: #031222; }
-@keyframes wave-run { from { transform: translateX(0); } to { transform: translateX(-1200px); } }
-[data-theme='ocean'][data-appearance='light'] {
-  --bg: #dff2f7;
-  --fg: #07324a;
-  --fg-2: rgba(7, 50, 74, 0.72);
-  --fg-3: rgba(7, 50, 74, 0.46);
-  --hair: rgba(7, 50, 74, 0.1);
-  --accent: #0b84c2;
-  --card-bg: rgba(255, 255, 255, 0.55);
-  --card-border: rgba(255, 255, 255, 0.8);
-  --card-shadow: 0 1.4rem 3rem -1.8rem rgba(8, 60, 90, 0.35);
-  --heat-0: rgba(7, 50, 74, 0.06);
-  --heat-1: #bfe6f2;
-  --heat-2: #7fcbe4;
-  --heat-3: #2fa6d6;
-  --heat-4: #0f6f9e;
-  --track: rgba(7, 50, 74, 0.08);
-  --mb-bg: rgba(255, 255, 255, 0.5);
-}
-[data-appearance='light'] .sc-ocean { background: linear-gradient(180deg, #7cc4ea 0%, #b9e3f5 45%, #e6f6fb 52%, #4fb3d6 53%, #12719f 100%); }
-[data-appearance='light'] .sc-ocean .stars { display: none; }
-[data-appearance='light'] .sc-ocean .moon { background: radial-gradient(circle, #fffbe8, #ffe8a6); box-shadow: 0 0 8vh 3vh rgba(255, 236, 170, 0.55); }
-[data-appearance='light'] .sc-ocean .glint { background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0 0.25vh, transparent 0.25vh 1.4vh); }
-[data-appearance='light'] .ws1a { stop-color: #5cc2e2; } [data-appearance='light'] .ws1b { stop-color: #2b9cc8; }
-[data-appearance='light'] .ws2a { stop-color: #44b0d8; } [data-appearance='light'] .ws2b { stop-color: #1f88b8; }
-[data-appearance='light'] .ws3a { stop-color: #2f9ccb; } [data-appearance='light'] .ws3b { stop-color: #1676a7; }
-[data-appearance='light'] .ws4a { stop-color: #1f86b8; } [data-appearance='light'] .ws4b { stop-color: #0f6493; }
-[data-appearance='light'] .ws5a { stop-color: #13719f; } [data-appearance='light'] .ws5b { stop-color: #08517a; }
-
-/* -------------------------------------------------- Forest (misty ranges, tiered pines, fireflies) */
-[data-theme='forest'] {
-  --bg: #0f1c24;
-  --fg: #ecf3e8;
-  --fg-2: rgba(236, 243, 232, 0.72);
-  --fg-3: rgba(236, 243, 232, 0.46);
-  --hair: rgba(236, 243, 232, 0.09);
-  --accent: #f2c94c;
-  --accent-2: #8fc59a;
-  --accent-3: #a6d4dc;
-  --card-bg: rgba(16, 30, 34, 0.5);
-  --card-border: rgba(236, 243, 232, 0.12);
-  --card-shadow: 0 1.4rem 3rem -1.6rem rgba(0, 0, 0, 0.55);
-  --card-blur: 20px;
-  --heat-0: rgba(236, 243, 232, 0.07);
-  --heat-1: #24402f;
-  --heat-2: #3f6b4f;
-  --heat-3: #6fa070;
-  --heat-4: #b6dc8f;
-  --track: rgba(236, 243, 232, 0.1);
-  --clock-weight: 250;
-  --mb-bg: rgba(15, 28, 36, 0.55);
-}
-.sc-forest { background: linear-gradient(180deg, #0b1522 0%, #1a2c3c 45%, #3b5560 72%, #2a3f45 100%); }
-.sc-forest .stars { position: absolute; width: 1px; height: 1px; opacity: 0.55; }
-.sc-forest .moon { position: absolute; left: 64vw; top: 13vh; width: 9vh; height: 9vh; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fffdf0, #ece4c8); box-shadow: 0 0 6vh 1.5vh rgba(240, 232, 200, 0.25), 0 0 22vh 8vh rgba(170, 190, 200, 0.1); }
-.sc-forest .range { position: absolute; left: 0; bottom: 0; width: 100%; height: 66vh; }
-.sc-forest .r1 path { fill: #33505c; opacity: 0.75; }
-.sc-forest .r2 path { fill: #263f49; opacity: 0.9; }
-.sc-forest .r3 path { fill: #1a2f36; }
-.sc-forest .trees { position: absolute; left: 0; bottom: 0; width: 100%; height: 34vh; }
-.sc-forest .hill, .sc-forest .pine { fill: #0d1b1f; }
-.sc-forest .mist { position: absolute; left: -20vw; width: 140vw; border-radius: 50%; animation: mist 46s ease-in-out infinite alternate; pointer-events: none; }
-.sc-forest .m1 { bottom: 26vh; height: 16vh; background: radial-gradient(closest-side, rgba(190, 215, 220, 0.22), transparent); }
-.sc-forest .m2 { bottom: 2vh; height: 14vh; background: radial-gradient(closest-side, rgba(190, 215, 220, 0.14), transparent); animation-duration: 58s; animation-direction: alternate-reverse; }
-@keyframes mist { to { transform: translateX(12vw); } }
-.sc-forest .flies i { position: absolute; width: 0.5vh; height: 0.5vh; border-radius: 50%; background: #f7e08a; box-shadow: 0 0 1.4vh 0.35vh rgba(247, 224, 138, 0.65); animation: firefly ease-in-out infinite alternate; }
-@keyframes firefly { 30% { opacity: 0.15; } 60% { transform: translate(2vw, -3vh); opacity: 1; } to { transform: translate(-1.5vw, -6vh); opacity: 0.35; } }
-[data-theme='forest'][data-appearance='light'] {
-  --bg: #e6eee3;
-  --fg: #1d3124;
-  --fg-2: rgba(29, 49, 36, 0.72);
-  --fg-3: rgba(29, 49, 36, 0.46);
-  --hair: rgba(29, 49, 36, 0.09);
-  --accent: #3f7a4f;
-  --card-bg: rgba(255, 255, 255, 0.55);
-  --card-border: rgba(255, 255, 255, 0.8);
-  --card-shadow: 0 1.2rem 2.6rem -1.8rem rgba(30, 60, 40, 0.35);
-  --heat-0: rgba(29, 49, 36, 0.06);
-  --heat-1: #cfe3c9;
-  --heat-2: #9cc79a;
-  --heat-3: #5e9a68;
-  --heat-4: #2f6b3e;
-  --track: rgba(29, 49, 36, 0.08);
-  --mb-bg: rgba(255, 255, 255, 0.5);
-}
-[data-appearance='light'] .sc-forest { background: linear-gradient(180deg, #b9d3dc 0%, #dfe9e3 55%, #eef3ea 100%); }
-[data-appearance='light'] .sc-forest .stars { display: none; }
-[data-appearance='light'] .sc-forest .moon { background: radial-gradient(circle, #fffcef, #fff1c4); box-shadow: 0 0 8vh 3vh rgba(255, 244, 200, 0.6); }
-[data-appearance='light'] .sc-forest .r1 path { fill: #b7cbc6; }
-[data-appearance='light'] .sc-forest .r2 path { fill: #94b1a6; }
-[data-appearance='light'] .sc-forest .r3 path { fill: #6f9284; }
-[data-appearance='light'] .sc-forest .hill, [data-appearance='light'] .sc-forest .pine { fill: #3e6150; }
-[data-appearance='light'] .sc-forest .m1, [data-appearance='light'] .sc-forest .m2 { background: radial-gradient(closest-side, rgba(255, 255, 255, 0.55), transparent); }
-[data-appearance='light'] .sc-forest .flies { display: none; }
 
 /* -------------------------------------------------- Astronomy (iPhone-style planet) */
 [data-theme='astro'] {
@@ -365,3 +120,9 @@
 .thumb[data-t='astro'] { background: radial-gradient(circle at 50% 150%, #a8a6a0 55%, rgba(255, 255, 255, 0.25) 56%, transparent 58%), #000; }
 .thumb[data-t='astro'] i { background: rgba(30, 30, 34, 0.8); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
 .thumb[data-t='astro'] i:nth-child(1) { left: 35%; width: 30%; background: #fff; height: 12%; }
+
+/* Astronomy: the real sky and tonight's moon phase */
+.sc-astro .realsky { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sc-astro .phase { position: absolute; inset: 0; border-radius: 50%; transition: background 1s; }
+.sc-astro .astro-cap { position: absolute; left: 0; right: 0; bottom: 3vh; text-align: center; font: 600 1.5vh 'Inter Variable', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
+[data-appearance='light'] .sc-astro .astro-cap { color: rgba(0, 0, 0, 0.45); }

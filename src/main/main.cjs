@@ -21,6 +21,7 @@ const ai = require('./ai.cjs');
 const wrapped = require('./wrapped.cjs');
 const organize = require('../shared/organize.cjs');
 const updater = require('./updater.cjs');
+const reminders = require('./reminders.cjs');
 const lyrics = require('./lyrics.cjs');
 const { Notification } = require('electron');
 
@@ -199,7 +200,7 @@ function scheduleRebuild() {
 // Page errors end up in app.log (next to config.json) when started from the CLI.
 function logRenderer(win, tag) {
   win.webContents.on('console-message', (e) => {
-    if (e.level === 'error' || e.level === 'warning') console.error(`[${tag}] ${e.message}`);
+    if (e.level === 'error' || e.level === 'warning' || process.env.WALL_DEBUG === '1') console.error(`[${tag}] ${e.level}: ${e.message}`);
   });
   win.webContents.on('render-process-gone', (_e, d) => console.error(`[${tag}] renderer gone: ${d.reason}`));
 }
@@ -324,9 +325,20 @@ function sendAll(channel, payload) {
 // ---------- Ask AI and Wrapped ----------
 
 function setupExtras() {
-  ipcMain.handle('ai:ask', (_e, q) => {
-    const m = media.get();
-    return ai.ask(String(q || '').slice(0, 2000), { song: m.active && m.title ? `${m.title}${m.artist ? ` by ${m.artist}` : ''}` : '' });
+  ipcMain.handle('ai:ask', async (_e, q) => ai.ask(String(q || '').slice(0, 2000), await aiContext(), [], aiHooks));
+  // ✨ in a sticky note: polish / summarize it in place, or turn it into to-dos
+  ipcMain.handle('ai:note', async (_e, mode, text) => {
+    const body = String(text || '').slice(0, 4000);
+    const prompts = {
+      polish: `Rewrite this sticky note so it's clearer and well organized. Keep the meaning and the language, keep it short. Put only the new note text in "reply".\n\n"""${body}"""`,
+      summarize: `Summarize this sticky note in 1-3 short lines. Put only the summary in "reply".\n\n"""${body}"""`,
+      todos: `Turn this note into to-do items using add_todo actions (one per task). Reply with one short sentence.\n\n"""${body}"""`,
+    };
+    if (!prompts[mode]) return { ok: false };
+    return ai.ask(prompts[mode], await aiContext(), [], aiHooks);
+  });
+  reminders.start((r) => {
+    if (Notification.isSupported()) new Notification({ title: 'Reminder', body: r.text, icon: path.join(ROOT, 'assets', 'icon.png') }).show();
   });
   ipcMain.handle('wrapped:data', () => wrapped.data());
 
@@ -351,8 +363,7 @@ function setupExtras() {
   ipcMain.handle('chat:send', async (_e, text) => {
     const q = String(text || '').trim().slice(0, 2000);
     if (!q) return chat;
-    const m = media.get();
-    const r = await ai.ask(q, { song: m.active && m.title ? `${m.title}${m.artist ? ` by ${m.artist}` : ''}` : '' }, chat);
+    const r = await ai.ask(q, await aiContext(), chat, aiHooks);
     chat.push({ role: 'user', text: q, at: Date.now() }, { role: 'assistant', text: r.reply, done: r.done || [], error: !r.ok, at: Date.now() });
     saveChat();
     return chat;
@@ -365,6 +376,76 @@ function setupExtras() {
     return pop ? wrapped.save(pop, rect) : null;
   });
 }
+
+// What the Assistant can see: a short, current snapshot of your desktop
+async function aiContext() {
+  const c = config.load();
+  const m = media.get();
+  const out = {};
+  if (m.active && m.title) out.song = `${m.title}${m.artist ? ` by ${m.artist}` : ''} (${m.playing ? 'playing' : 'paused'} in ${m.appName || 'a player'})`;
+  const timeout = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), 2500))]);
+  const [wx, git, stk] = await Promise.all([
+    timeout(require('./weather.cjs').get(c)).catch(() => null),
+    timeout(require('./git.cjs').get(c)).catch(() => null),
+    (() => {
+      const syms = c.widgets.filter((w) => w.type === 'stocks').flatMap((w) => w.symbols || []);
+      return syms.length ? timeout(require('./stocks.cjs').quotes(syms)).catch(() => null) : null;
+    })(),
+  ]);
+  if (wx?.ok) {
+    out.weather = `${wx.city}: ${wx.temp}°C, ${wx.label}, feels ${wx.feels}°, high ${wx.high}° low ${wx.low}°, humidity ${wx.humidity}%`;
+    const fc = await timeout(require('./weather.cjs').forecast(c)).catch(() => null);
+    const hours = (fc?.hourly || []).slice(0, 12);
+    if (hours.length) {
+      const wet = hours.reduce((a, h) => ((h.rain ?? 0) > (a.rain ?? 0) ? h : a), hours[0]);
+      out.weather += (wet.rain ?? 0) > 0 ? `; rain chance next 12h up to ${wet.rain}% (around ${String(wet.hour).padStart(2, '0')}:00)` : '; no rain expected in the next 12 hours';
+    }
+  }
+  if (git?.recent?.length) {
+    const todayKey = new Date().toDateString();
+    const today = git.recent.filter((r) => new Date(r.time).toDateString() === todayKey).length;
+    out.commits = `${today} commits today; latest "${git.recent[0].message}" in ${git.recent[0].repo}`;
+  }
+  if (stk?.items?.length) out.stocks = stk.items.filter((s) => !s.error).map((s) => `${s.name} ${s.price.toFixed(2)} (${s.pct >= 0 ? '+' : ''}${s.pct.toFixed(2)}%)`).join('; ');
+  const p = native.powerStatus?.();
+  if (p?.hasBattery) out.battery = `${Math.round((p.level || 0) * 100)}%${p.ac ? ', plugged in' : ', on battery'}`;
+  const up = reminders.upcoming().slice(0, 5);
+  if (up.length) out.reminders = up.map((r) => `${r.text} at ${new Date(r.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`).join('; ');
+  return out;
+}
+
+// What the Assistant can do beyond your notes and settings
+const aiHooks = {
+  music: (a) => {
+    const cmd = { play: 'play', pause: 'pause', toggle: 'toggle', next: 'next', previous: 'prev', prev: 'prev' }[String(a.text).toLowerCase()];
+    if (!cmd || !media.get().active) return null;
+    media.command(cmd);
+    return `Music: ${a.text}`;
+  },
+  set_volume: (a) => {
+    const v = Math.max(0, Math.min(100, Number(a.index)));
+    if (!Number.isFinite(v) || a.index < 0) return null;
+    native.setVolume(v);
+    return `Volume ${v}%`;
+  },
+  open_app: (a) => {
+    const hit = spotlight.search(String(a.text || '')).find((r) => r.kind === 'app');
+    if (!hit) return `Couldn't find an app called "${a.text}"`;
+    spotlight.open(hit);
+    return `Opened ${hit.title}`;
+  },
+  open_url: (a) => {
+    const t = String(a.text || '').trim();
+    if (!t) return null;
+    const url = /^https?:\/\//i.test(t) ? t : `https://www.google.com/search?q=${encodeURIComponent(t)}`;
+    require('electron').shell.openExternal(url);
+    return /^https?:/i.test(t) ? `Opened ${new URL(url).hostname}` : `Searched the web for "${t}"`;
+  },
+  remind: (a) => {
+    const r = reminders.add(a.text, a.date);
+    return r ? `Reminder: ${r.text}, ${new Date(r.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : `Couldn't set that reminder (time unclear)`;
+  },
+};
 
 // ---------- updates ----------
 
@@ -637,6 +718,11 @@ function startControlServer() {
     if (url.pathname === '/debug-click') {
       const wp = wallpapers.find((w) => !w.win.isDestroyed());
       if (!wp) return reply({ ok: false });
+      // ?x=..&y=..: just move the mouse there (tests hover behaviour)
+      if (url.searchParams.has('y')) {
+        wp.win.webContents.sendInputEvent({ type: 'mouseMove', x: Number(url.searchParams.get('x')) || 400, y: Number(url.searchParams.get('y')) });
+        return reply({ ok: true });
+      }
       const sel = url.searchParams.get('sel') || '';
       wp.win.webContents
         .executeJavaScript(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`)
@@ -699,7 +785,7 @@ function startControlServer() {
         const wp = wallpapers.find((w) => !w.win.isDestroyed());
         if (!wp) return reply({ ok: false });
         wp.win.webContents
-          .executeJavaScript(`(() => { const a = document.querySelector('.music .mu-art'); return { found: !!a, bg: a ? getComputedStyle(a).backgroundImage.slice(0, 60) : null, inline: a ? a.getAttribute('style')?.length : null }; })()`)
+          .executeJavaScript(`(() => { const r = document.documentElement; const w = document.querySelector('.album-wall'); const b = document.querySelector('.aw-bg .b1'); const cs = b && getComputedStyle(b); return { perf: r.dataset.perf, paused: r.hasAttribute('data-paused'), motion: r.dataset.motion, wall: w && w.className, anim: cs && cs.animationName, state: cs && cs.animationPlayState, transform: cs && cs.transform, cores: navigator.hardwareConcurrency, mem: navigator.deviceMemory }; })()`)
           .then((r) => reply(r));
         return;
       }
@@ -707,7 +793,7 @@ function startControlServer() {
         const wp = wallpapers.find((w) => !w.win.isDestroyed());
         if (!wp) return reply({ ok: false });
         const which = url.searchParams.get('win');
-        const target = which === 'popup' ? interact.popupWindow() : which === 'player' ? player : which === 'spot' ? spot : wp.win;
+        const target = which === 'popup' ? interact.popupWindow() : which === 'player' ? player : which === 'spot' ? spot : which === 'editor' ? editor : wp.win;
         target.webContents.capturePage().then((img) => {
           const file = path.join(config.DIR, 'debug-shot.png');
           fs.writeFileSync(file, img.resize({ width: 1280 }).toPNG());
@@ -725,6 +811,11 @@ function startControlServer() {
       case '/debug-weather':
         require('./weather.cjs').get(config.load(), true).then((r) => reply(r));
         return;
+      case '/debug-editor': {
+        if (!editor || editor.isDestroyed()) return reply({ editor: null });
+        editor.webContents.executeJavaScript(`({ ready: document.documentElement.classList.contains('ready'), mode: document.documentElement.dataset.mode, widgets: document.querySelectorAll('#stage .w').length, chrome: document.getElementById('chrome').innerHTML.length, bodyClass: document.body.className, firstW: document.querySelector('#stage .w') && getComputedStyle(document.querySelector('#stage .w')).opacity })`).then(reply).catch((e) => reply({ error: String(e) }));
+        return;
+      }
       case '/debug-media': {
         const m = media.get();
         return reply({ ...m, art: m.art ? `${m.art.slice(0, 40)}… (${m.art.length})` : null });

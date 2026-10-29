@@ -2,7 +2,7 @@ import { WIDGETS, SHAPED } from './widgets.js';
 import { mountScene } from './scenes.js';
 import { demoStore } from './demo.js';
 import { TINTS, FONTS } from './widgetform.js';
-import { mountAmbient, updateAmbient } from './ambient.js';
+import { mountAmbient, updateAmbient, confetti } from './ambient.js';
 
 const q = new URLSearchParams(location.search);
 const MODE = q.get('mode') || 'wallpaper'; // wallpaper | edit
@@ -10,6 +10,12 @@ const PRIMARY = q.get('primary') !== '0';
 const DEMO = q.has('demo');
 // Linux: room for the desktop's own top panel above our menu bar
 document.documentElement.style.setProperty('--inset-top', `${Number(q.get('inset')) || 0}px`);
+// a named tint or any #rrggbb the user picked
+const color = (v) => TINTS[v] || (/^#[0-9a-f]{6}$/i.test(v || '') ? v : null);
+const isLight = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 255000 > 0.62;
+};
 const AMBIENT = PRIMARY && !DEMO && (MODE === 'wallpaper' || MODE === 'edit');
 
 const root = document.documentElement;
@@ -59,9 +65,17 @@ const theme = () => q.get('theme') || cfg.theme;
 
 // Light / dark: 'auto' follows Windows (and flips live when you toggle dark mode).
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+// 'sun': light from your real sunrise to sunset (from the weather), dark after
+let sunTimes = null; // { rise, set } in minutes after midnight
+function byTheSun() {
+  const now = new Date();
+  const m = now.getHours() * 60 + now.getMinutes();
+  const { rise = 390, set = 1110 } = sunTimes || {};
+  return m >= rise && m < set ? 'light' : 'dark';
+}
 function applyAppearance() {
   const a = q.get('appearance') || cfg?.appearance || 'auto';
-  root.dataset.appearance = a === 'auto' ? (darkQuery.matches ? 'dark' : 'light') : a;
+  root.dataset.appearance = a === 'auto' ? (darkQuery.matches ? 'dark' : 'light') : a === 'sun' ? byTheSun() : a;
 }
 darkQuery.addEventListener('change', () => {
   applyAppearance();
@@ -79,6 +93,7 @@ async function applyLook() {
   root.dataset.theme = theme();
   applyAppearance();
   root.dataset.motion = cfg.motion === false ? 'off' : 'on';
+  document.body.classList.toggle('mb-auto', cfg.menubarFixed === false && MODE === 'wallpaper'); // shown unless you turn it off
   applyPerf();
   root.dataset.mode = MODE;
 
@@ -89,11 +104,7 @@ async function applyLook() {
     root.dataset.bg = url ? 'image' : 'scene';
   }
   backdrop.style.setProperty('--dim', String(cfg.dim ?? 0.25));
-  // your own accent color for the whole theme (Settings), including the commit graph
-  const acc = TINTS[cfg.accent];
-  for (const [k, v] of Object.entries({ '--accent': acc, '--heat-1': acc && `color-mix(in srgb, ${acc} 28%, transparent)`, '--heat-2': acc && `color-mix(in srgb, ${acc} 50%, transparent)`, '--heat-3': acc && `color-mix(in srgb, ${acc} 75%, transparent)`, '--heat-4': acc }))
-    if (v) root.style.setProperty(k, v);
-    else root.style.removeProperty(k);
+  applyAccent();
 
   const key = `${theme()}|${root.dataset.bg}|${root.dataset.appearance}|${cfg.planet || ''}`;
   if (key !== sceneKey) {
@@ -104,6 +115,15 @@ async function applyLook() {
   } else {
     scene?.update(ctx());
   }
+}
+
+// your own accent for the whole theme (Settings), including the commit graph.
+// 'song' follows the cover of whatever is playing.
+function applyAccent() {
+  const acc = cfg.accent === 'song' ? (store.media?.active && store.media.color) || null : color(cfg.accent);
+  for (const [k, v] of Object.entries({ '--accent': acc, '--heat-1': acc && `color-mix(in srgb, ${acc} 28%, transparent)`, '--heat-2': acc && `color-mix(in srgb, ${acc} 50%, transparent)`, '--heat-3': acc && `color-mix(in srgb, ${acc} 75%, transparent)`, '--heat-4': acc }))
+    if (v) root.style.setProperty(k, v);
+    else root.style.removeProperty(k);
 }
 
 // ------------------------------------------------------------------ widgets
@@ -118,6 +138,8 @@ function keyFor(w) {
   if (w.type === 'dock') k += `|${store.dock?.map((a) => a.target + !!a.icon).join() ?? ''}`;
   if (w.type === 'art') k += `|${store.art?.id ?? ''}|${store.artTried ?? ''}`;
   if (w.type === 'stocks') k += `|${store.stocks?.updated ?? ''}`;
+  if (w.type === 'photo' && w.every) k += `|${Math.floor(Date.now() / (w.every * 60000))}`;
+  if (w.type === 'memories') k += `|${store.memories?.photos.length ?? -1}|${Math.floor(Date.now() / ((w.every || 15) * 60000))}`;
   if (w.type === 'verse') k += `|${store.verse?.ref ?? ''}|${store.verseTried ?? ''}`;
   if (w.type === 'commits' || w.type === 'feed') k += `|${store.git?.updated ?? 'none'}`;
   if (w.type === 'weather') k += `|${store.weather?.updated ?? store.weather?.reason ?? 'none'}`;
@@ -125,8 +147,34 @@ function keyFor(w) {
   return k;
 }
 
+// 🎉 the moment the last to-do is ticked, or a countdown reaches zero
+const allDone = new Map(); // todo widget id -> were all items done last time
+const celebrated = new Set(); // countdown ids that already went off
+function checkCelebrations() {
+  if (!AMBIENT || MODE !== 'wallpaper') return;
+  let party = false;
+  for (const w of cfg.widgets) {
+    if (w.type === 'todo') {
+      const items = w.items || [];
+      const done = items.length > 0 && items.every((i) => i.done);
+      if (done && allDone.get(w.id) === false) party = true;
+      allDone.set(w.id, done);
+    }
+    if (w.type === 'countdown' && w.date) {
+      const left = new Date(`${w.date}T00:00:00`).getTime() - Date.now();
+      const key = `${w.id}|${w.date}`;
+      if (left <= 0 && left > -60000 && !celebrated.has(key)) party = true;
+      if (left <= 0) celebrated.add(key);
+    }
+  }
+  if (party) confetti();
+}
+
+// The menu bar belongs to every theme: always on the main screen, never a widget you can lose
+const MENUBAR = { id: 'menubar', type: 'menubar', x: 0, y: 0 };
+
 function render(opts = {}) {
-  const list = PRIMARY ? cfg.widgets : [];
+  const list = PRIMARY ? [MENUBAR, ...cfg.widgets.filter((w) => w.type !== 'menubar')] : [];
   const seen = new Set();
   const c = ctx();
   for (const w of list) {
@@ -151,7 +199,7 @@ function render(opts = {}) {
     const shaped = w.shape && SHAPED[w.type]?.[w.shape]; // Apple-style Small / Medium tile
     rec.el.innerHTML = shaped ? shaped(w, c) : impl.render(w, c);
     impl.tick?.(rec.el, w, c);
-    editor?.decorate(rec.el, w);
+    if (w.type !== 'menubar') editor?.decorate(rec.el, w);
     // live wallpaper: a quiet ••• on hover opens Edit Widget
     if (MODE === 'wallpaper' && PRIMARY && !DEMO && w.type !== 'menubar') rec.el.insertAdjacentHTML('beforeend', `<button class="w-more" data-act="widget-edit" title="Edit widget">•••</button>`);
   }
@@ -162,6 +210,7 @@ function render(opts = {}) {
     }
   }
   if (AMBIENT) updateAmbient(c);
+  checkCelebrations();
 }
 
 // First-run hint: the wallpaper can't be clicked, so tell people how to edit it.
@@ -195,17 +244,18 @@ function place(el, w) {
   el.dataset.style = w.style || 'theme';
   if (w.shape) el.dataset.shape = w.shape;
   else delete el.dataset.shape;
-  el.dataset.tint = w.tint || 'graphite';
-  el.style.setProperty('--wt', TINTS[w.tint] || TINTS.graphite);
+  const tint = color(w.tint) || TINTS.graphite;
+  el.dataset.tint = TINTS[w.tint] ? w.tint : w.tint && isLight(tint) ? 'white' : 'graphite';
+  el.style.setProperty('--wt', tint);
   el.style.setProperty('--wo', String(w.opacity ?? 1));
-  el.classList.toggle('has-accent', !!(w.accent && TINTS[w.accent]));
-  if (w.accent && TINTS[w.accent]) el.style.setProperty('--accent', TINTS[w.accent]);
+  el.classList.toggle('has-accent', !!color(w.accent));
+  if (color(w.accent)) el.style.setProperty('--accent', color(w.accent));
   else el.style.removeProperty('--accent');
   if (w.corners) el.dataset.corners = w.corners;
   else delete el.dataset.corners;
   el.classList.toggle('no-shadow', w.shadow === false);
   // text color (Edit Widget)
-  const tc = TINTS[w.textColor];
+  const tc = color(w.textColor);
   for (const [k, v] of Object.entries({ '--fg': tc, '--fg-2': tc && `color-mix(in srgb, ${tc} 68%, transparent)`, '--fg-3': tc && `color-mix(in srgb, ${tc} 44%, transparent)` }))
     if (v) el.style.setProperty(k, v);
     else el.style.removeProperty(k);
@@ -227,8 +277,13 @@ function place(el, w) {
   }
 }
 
+let lastSun = '';
 function tick() {
   if (hidden) return;
+  if (cfg.appearance === 'sun' && byTheSun() !== lastSun) {
+    lastSun = byTheSun();
+    applyLook();
+  }
   applyPerf();
   // advance Smart Stacks on their own clock (paused while the pointer is over them)
   const now = Date.now();
@@ -269,8 +324,10 @@ let gitKey = '';
 let dockKey = '';
 async function pollWeather(force = false) {
   // weather is also needed for rain/snow on the desktop itself
-  if (!has('weather') && theme() !== 'weather' && !(AMBIENT && cfg.weatherFx !== 'off')) return;
+  if (!has('weather') && theme() !== 'weather' && cfg.appearance !== 'sun' && !(AMBIENT && cfg.weatherFx !== 'off')) return;
   store.weather = await window.wall.weather(force);
+  if (store.weather?.ok) sunTimes = { rise: store.weather.sunrise, set: store.weather.sunset };
+  if (cfg.appearance === 'sun') applyLook();
   render();
   scene?.update(ctx());
   // a failed fetch (network still waking up, a hiccup) tries again soon instead of in 15 minutes
@@ -321,6 +378,12 @@ async function pollStocks() {
   const symbols = [...new Set(cfg.widgets.filter((w) => w.type === 'stocks').flatMap((w) => w.symbols || []))];
   stocksKey = symbols.join();
   store.stocks = await window.wall.stocks(symbols);
+  render();
+}
+
+async function pollMemories() {
+  if (!has('memories')) return;
+  store.memories = await window.wall.memories();
   render();
 }
 
@@ -391,6 +454,7 @@ function onConfigSideEffects() {
   }
   const sk = [...new Set(cfg.widgets.filter((w) => w.type === 'stocks').flatMap((w) => w.symbols || []))].join();
   if (has('stocks') && sk !== stocksKey) pollStocks();
+  if (has('memories') && !store.memories) pollMemories();
   if ((has('quote') && !store.quote) || (has('verse') && !store.verse) || (has('art') && !store.art)) pollDaily();
 }
 
@@ -432,6 +496,11 @@ async function boot() {
       root.dataset.theme = theme();
       applyAppearance();
     });
+    window.wall.weather?.().then((w) => {
+      if (w?.ok) sunTimes = { rise: w.sunrise, set: w.sunset };
+      applyAppearance();
+    });
+    setInterval(applyAppearance, 60 * 1000);
     const mod = await import({ popup: './popup.js', spotlight: './spotlight.js', player: './player.js' }[MODE]);
     mod.start({ cfg, info, params: q });
     document.fonts.ready.then(() => root.classList.add('ready'));
@@ -473,6 +542,7 @@ async function boot() {
   setInterval(() => pollWeather(true), 15 * 60 * 1000);
   setInterval(pollDaily, 30 * 60 * 1000);
   setInterval(pollStocks, 60 * 1000);
+  setInterval(pollMemories, 3 * 60 * 60 * 1000); // picks up a new day's photos
   window.addEventListener('online', () => {
     pollWeather(true);
     pollDaily();
@@ -484,6 +554,7 @@ async function boot() {
   pollWeather();
   pollDaily();
   pollStocks();
+  pollMemories();
   pollSystem();
   dockKey = JSON.stringify(cfg.dock ?? null);
   pollDock();
@@ -509,7 +580,9 @@ async function boot() {
       render();
     });
     window.wall.onMedia((s) => {
+      const recolor = cfg.accent === 'song' && (s?.color !== store.media?.color || !!s?.active !== !!store.media?.active);
       store.media = s;
+      if (recolor) applyAccent();
       render();
       tick();
     });

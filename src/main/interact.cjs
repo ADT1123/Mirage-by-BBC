@@ -369,6 +369,9 @@ async function action(name, arg) {
       if (ide) return require('child_process').spawn(ide.exe, [arg], { detached: true, stdio: 'ignore' }).unref();
       return shell.openPath(arg);
     }
+    case 'open-photo':
+      closePopup();
+      return arg && /\.(jpe?g|png|webp|heic|gif)$/i.test(arg) && fs.existsSync(arg) ? shell.openPath(arg) : null;
     case 'reveal':
       closePopup();
       return arg && fs.existsSync(arg) ? shell.openPath(arg) : null;

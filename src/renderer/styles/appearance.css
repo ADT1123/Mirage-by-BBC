@@ -4,34 +4,6 @@
    ('auto' follows Windows, or forced light/dark in settings).
    ===================================================================== */
 
-/* -------------------------------------------------- Aurora → light */
-[data-theme='aurora'][data-appearance='light'] {
-  --bg: #eef0f8;
-  --fg: #15162b;
-  --fg-2: rgba(21, 22, 43, 0.66);
-  --fg-3: rgba(21, 22, 43, 0.44);
-  --hair: rgba(21, 22, 43, 0.08);
-  --accent: #6b5bff;
-  --accent-2: #12a891;
-  --accent-3: #e2508f;
-  --card-bg: rgba(255, 255, 255, 0.64);
-  --card-border: rgba(21, 22, 43, 0.07);
-  --card-shadow: 0 1.4rem 3rem -1.8rem rgba(70, 70, 140, 0.4);
-  --heat-0: rgba(21, 22, 43, 0.06);
-  --heat-1: #b8efe5;
-  --heat-2: #6fdcc8;
-  --heat-3: #26b9a2;
-  --heat-4: #0f8a77;
-  --track: rgba(21, 22, 43, 0.08);
-  --text-shadow: none;
-  --mb-bg: rgba(255, 255, 255, 0.6);
-}
-[data-appearance='light'] .sc-aurora { background: #eef0f8; }
-[data-appearance='light'] .sc-aurora .b1 { background: radial-gradient(closest-side, rgba(124, 92, 255, 0.2), transparent); }
-[data-appearance='light'] .sc-aurora .b2 { background: radial-gradient(closest-side, rgba(46, 230, 197, 0.2), transparent); }
-[data-appearance='light'] .sc-aurora .grain { opacity: 0.1; }
-[data-appearance='light'] .sc-aurora .vignette { display: none; }
-
 /* -------------------------------------------------- Midnight → light ("Daylight") */
 [data-theme='midnight'][data-appearance='light'] {
   --bg: #f5f4f1;
@@ -57,91 +29,6 @@
 [data-appearance='light'] .sc-midnight .rim { background: #121212; box-shadow: inset 0.7vh -0.5vh 1.6vh -0.5vh rgba(255, 170, 100, 0.9), 0 0 0 1px rgba(232, 100, 27, 0.4); }
 [data-appearance='light'] .sc-midnight .stars { display: none; }
 [data-theme='midnight'][data-appearance='light'] .note { background: #fff; color: #121212; border-color: rgba(0, 0, 0, 0.08); }
-
-/* -------------------------------------------------- Terminal → light ("paper terminal") */
-[data-theme='terminal'][data-appearance='light'] {
-  --bg: #f2efe5;
-  --fg: #0e5132;
-  --fg-2: rgba(14, 81, 50, 0.72);
-  --fg-3: rgba(14, 81, 50, 0.45);
-  --hair: rgba(14, 81, 50, 0.12);
-  --accent: #0a7a43;
-  --accent-2: #9a6400;
-  --accent-3: #1a5fb4;
-  --on-accent: #fff;
-  --card-bg: rgba(255, 253, 246, 0.9);
-  --card-border: rgba(10, 122, 67, 0.3);
-  --card-shadow: 0 1.2rem 2.4rem -1.6rem rgba(40, 60, 30, 0.35);
-  --heat-0: rgba(10, 122, 67, 0.07);
-  --heat-1: #bfe6cc;
-  --heat-2: #7fcf9c;
-  --heat-3: #33a865;
-  --heat-4: #0a7a43;
-  --track: rgba(10, 122, 67, 0.12);
-  --text-shadow: none;
-  --mb-bg: rgba(242, 239, 229, 0.9);
-}
-[data-appearance='light'] .sc-terminal { background: #f2efe5; }
-[data-appearance='light'] .sc-terminal .log { color: rgba(10, 122, 67, 0.045); }
-[data-appearance='light'] .sc-terminal .grid { background-image: linear-gradient(rgba(10, 122, 67, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(10, 122, 67, 0.05) 1px, transparent 1px); }
-[data-appearance='light'] .sc-terminal .scan,
-[data-theme='terminal'][data-appearance='light'] #stage::after { opacity: 0.25; }
-[data-theme='terminal'][data-appearance='light'] .card { text-shadow: none; }
-[data-theme='terminal'][data-appearance='light'] .note { background: rgba(255, 253, 246, 0.95); }
-[data-theme='terminal'][data-appearance='light'] .clock-time::after { box-shadow: none; }
-
-/* -------------------------------------------------- Synthwave → light ("sunrise") */
-[data-theme='synthwave'][data-appearance='light'] {
-  --bg: #ffe6f0;
-  --fg: #3a0b46;
-  --fg-2: rgba(58, 11, 70, 0.7);
-  --fg-3: rgba(58, 11, 70, 0.45);
-  --hair: rgba(255, 63, 191, 0.18);
-  --accent: #ff3fbf;
-  --accent-2: #0fb5d6;
-  --card-bg: rgba(255, 255, 255, 0.78);
-  --card-border: rgba(255, 63, 191, 0.35);
-  --card-shadow: 0 1rem 2.4rem -1.4rem rgba(255, 63, 191, 0.4);
-  --heat-0: rgba(58, 11, 70, 0.06);
-  --heat-1: #f8c4e6;
-  --heat-2: #f38bd3;
-  --heat-3: #ff3fbf;
-  --heat-4: #0fb5d6;
-  --track: rgba(58, 11, 70, 0.08);
-  --mb-bg: rgba(255, 255, 255, 0.6);
-}
-[data-appearance='light'] .sc-synth { background: #ffe0ec; }
-[data-appearance='light'] .sc-synth .stars { display: none; }
-[data-appearance='light'] .sc-synth .mountains path { fill: #f6c3db; }
-[data-appearance='light'] .sc-synth .floor { background: #fff0f6; }
-[data-appearance='light'] .sc-synth .grid { background-image: linear-gradient(rgba(255, 63, 191, 0.55) 2px, transparent 2px), linear-gradient(90deg, rgba(15, 181, 214, 0.45) 2px, transparent 2px); }
-[data-theme='synthwave'][data-appearance='light'] .clock-time { text-shadow: none; }
-
-/* -------------------------------------------------- Bhakti → light ("ivory") */
-[data-theme='bhakti'][data-appearance='light'] {
-  --bg: #f7ecd6;
-  --fg: #4a1608;
-  --fg-2: rgba(74, 22, 8, 0.72);
-  --fg-3: rgba(74, 22, 8, 0.46);
-  --hair: rgba(184, 102, 27, 0.25);
-  --accent: #b5651d;
-  --accent-3: #9a3b10;
-  --on-accent: #fff;
-  --card-bg: rgba(255, 250, 240, 0.86);
-  --card-border: rgba(181, 101, 29, 0.32);
-  --card-shadow: 0 1.4rem 2.6rem -1.8rem rgba(120, 60, 20, 0.4);
-  --heat-0: rgba(74, 22, 8, 0.06);
-  --heat-1: #f3d2a6;
-  --heat-2: #e7a660;
-  --heat-3: #c97a2c;
-  --heat-4: #9a3b10;
-  --track: rgba(74, 22, 8, 0.1);
-  --mb-bg: rgba(247, 236, 214, 0.85);
-}
-[data-appearance='light'] .sc-bhakti { background: #f7ecd6; }
-[data-appearance='light'] .sc-bhakti .mandala * { stroke: rgba(150, 80, 20, 0.2); }
-[data-appearance='light'] .sc-bhakti .mandala .dot { fill: rgba(150, 80, 20, 0.32); }
-[data-theme='bhakti'][data-appearance='light'] .art-frame { box-shadow: 0 0 0 0.6rem #f7ecd6, 0 0 0 calc(0.6rem + 1px) rgba(181, 101, 29, 0.45), 0 2rem 4rem -1.4rem rgba(120, 60, 20, 0.45); }
 
 /* -------------------------------------------------- Weather (sky follows time; cards follow appearance) */
 [data-theme='weather'][data-appearance='light'] {

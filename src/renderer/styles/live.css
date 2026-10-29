@@ -1440,3 +1440,95 @@ body.live:not(.ctrl-held) :is([data-act='url'], [data-act='github']):hover { tex
 
 /* Linux: our menu bar sits under the desktop's own top panel */
 .w-menubar { top: var(--inset-top, 0px); }
+
+/* ------------------------------------------------------------ photo + emoji widgets */
+
+.photo-card { width: 23.2rem; height: 23.2rem; padding: 0 !important; background: color-mix(in srgb, var(--fg) 8%, transparent) center / cover no-repeat; overflow: hidden; }
+.photo-card.sq, .photo-card.sq-wide { height: 11rem; }
+.photo-card.empty { display: grid; place-content: center; justify-items: center; gap: 0.5rem; color: var(--fg-3); font-size: 0.8rem; }
+.photo-card.empty .ico { width: 2rem; height: 2rem; }
+.sticker { width: 11rem; height: 11rem; box-sizing: border-box; display: grid; place-items: center; text-align: center; overflow: hidden; }
+.sticker span { font-size: 5.2rem; line-height: 1.1; word-break: break-word; }
+.sticker span:not(:only-child), .sticker span { max-width: 100%; }
+.sticker.plain { background: none; border: 0; box-shadow: none; filter: drop-shadow(0 0.6rem 1.2rem rgba(0, 0, 0, 0.35)); }
+
+/* Edit Widget: photos, emoji, any color */
+.wg-photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.wg-photos > span { position: relative; aspect-ratio: 1; border-radius: 10px; background: var(--t1) center / cover; }
+.wg .wg-photos > span button { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, 0.6); color: #fff; opacity: 0; }
+.wg-photos > span:hover button { opacity: 1; }
+.wg-photos > span .ico { width: 11px; height: 11px; }
+.wg .wg-addphoto { aspect-ratio: 1; border-radius: 10px; display: grid; place-content: center; justify-items: center; gap: 2px; background: var(--t1); color: var(--fg2); box-shadow: inset 0 0 0 1px var(--ui-line, rgba(255, 255, 255, 0.1)); }
+.wg-addphoto .ico { width: 18px; height: 18px; }
+.wg-addphoto small { font-size: 10.5px; }
+.wg-emoji { font-size: 18px !important; text-align: center; }
+.wg-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.wg .wg-emojis button { height: 34px; border-radius: 8px; display: grid; place-items: center; font-size: 19px; }
+.wg .wg-emojis button:hover { background: var(--t1); }
+.wg-anycolor { position: relative; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--c, conic-gradient(#ff453a, #ffd60a, #30d158, #0a84ff, #bf5af2, #ff453a)); box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35); cursor: default; overflow: hidden; }
+.wg-anycolor input { position: absolute; inset: 0; opacity: 0; cursor: default; }
+.wg-anycolor .ico { width: 13px; height: 13px; color: #fff; stroke-width: 3; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7)); pointer-events: none; }
+.wg-anycolor.on { box-shadow: 0 0 0 2px var(--ui-bg, #1e1e22), 0 0 0 3.5px var(--acc); }
+
+.mem { position: relative; }
+.mem::after { content: ''; position: absolute; inset: 55% 0 0; background: linear-gradient(transparent, rgba(0, 0, 0, 0.55)); }
+.mem-label { position: absolute; left: 1rem; bottom: 0.85rem; right: 1rem; z-index: 1; font-size: 0.85rem; font-weight: 650; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }
+.live .mem { cursor: pointer; }
+
+/* Settings: song accent, any color, background photo, all-widgets rows */
+.sm .sm-dots button.song { display: grid; place-items: center; background: var(--ui-tile-2); color: var(--ui-fg); }
+.sm-dots button.song .ico { width: 10px; height: 10px; }
+.sm-anycolor { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--c, conic-gradient(#ff453a, #ffd60a, #30d158, #0a84ff, #bf5af2, #ff453a)); box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35); overflow: hidden; }
+.sm-anycolor.on { box-shadow: 0 0 0 2px var(--ui-bg), 0 0 0 3.5px var(--ui-fg-2); }
+.sm-anycolor input { position: absolute; inset: 0; opacity: 0; }
+.sm-thumb { flex: none !important; width: 34px; height: 22px; border-radius: 5px; background: center / cover; }
+.sm .sm-row input[type='range'] { all: revert; width: 130px; accent-color: var(--ui-accent); }
+.sm-row.sm-stack { flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; gap: 6px; }
+.sm-row.sm-stack > span:first-child { flex: 1 1 100%; font-size: 12px; color: var(--ui-fg-2); }
+.sm-row.sm-stack .sm-seg { flex: 1 1 100%; }
+.sm-row.sm-stack .sm-seg button { flex: 1; text-align: center; }
+
+/* ✨ in notes and to-dos */
+.pop-ai { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding: 8px; border-radius: 14px; background: var(--ui-bg); box-shadow: var(--ui-shadow); font-family: var(--ui-font); }
+.pop-ai[hidden] { display: none; }
+.pop-ai button { padding: 6px 12px; border-radius: 999px; background: var(--ui-tile); font-size: 12px; color: var(--ui-fg); }
+.pop-ai button:hover { background: var(--ui-tile-2); }
+.pop-ai small { flex: 1 1 100%; padding: 0 4px; font-size: 11px; color: var(--ui-fg-3); }
+.pop-ai small:empty { display: none; }
+.pt-ai { display: flex; align-items: center; gap: 5px; }
+.pt-ai .ico { width: 13px; height: 13px; }
+
+.np-lmsg small { display: block; margin-top: 1vh; font-size: 1.7vh; font-weight: 500; color: rgba(255, 255, 255, 0.4); }
+
+/* ------------------------------------------------------------ album-art wallpaper */
+
+.album-wall { position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s ease; overflow: hidden; }
+.album-wall.on { opacity: 1; }
+/* same layers and motion as the Now Playing background (.np-bg), sized for the whole desktop */
+.aw-bg { position: absolute; left: 50%; top: 50%; width: 34vw; height: 34vh; transform: translate(-50%, -50%) scale(3.4); background: var(--tint, #222); filter: blur(18px) saturate(1.4) brightness(1.08); overflow: hidden; opacity: 0; transition: opacity 2.6s ease; }
+.aw-bg.front { opacity: 1; }
+.aw-bg i { position: absolute; display: block; will-change: transform; }
+.aw-bg .art-layer { background-size: cover; background-position: center; opacity: 0.9; }
+.aw-bg .a1 { inset: -40%; animation: np-spin 48s linear infinite; }
+.aw-bg .a2 { width: 90%; height: 90%; left: 30%; top: 25%; border-radius: 50%; animation: np-spin 36s linear infinite reverse; opacity: 0.75; }
+.aw-bg .blob { border-radius: 50%; opacity: 0.92; }
+.aw-bg .b1 { width: 70%; height: 80%; left: -15%; top: -20%; background: var(--p1, #6d5cff); animation: np-float1 17s ease-in-out infinite alternate; }
+.aw-bg .b2 { width: 65%; height: 75%; right: -18%; top: -10%; background: var(--p2, #ff3d7f); animation: np-float2 21s ease-in-out infinite alternate; }
+.aw-bg .b3 { width: 70%; height: 70%; left: 10%; bottom: -30%; background: var(--p3, #2ee6c5); animation: np-float3 19s ease-in-out infinite alternate; }
+.aw-bg .b4 { width: 45%; height: 55%; right: 5%; bottom: -15%; background: var(--p4, #222); opacity: 0.7; animation: np-float1 25s ease-in-out infinite alternate-reverse; }
+/* it keeps moving even with Animations off (that switch is for the themes); it still rests
+   when the music is paused or the wallpaper is covered */
+.album-wall:not(.playing) .aw-bg i { animation-play-state: paused !important; }
+[data-paused] .aw-bg i { animation-play-state: paused !important; }
+[data-perf='saver'] .aw-bg i { animation: none; }
+/* a soft shade on top so widgets stay readable over the colors */
+.album-wall b { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.3)); }
+[data-appearance='light'] .album-wall b { background: radial-gradient(120% 90% at 50% 40%, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.22)); }
+
+/* confetti flies above everything, never catches clicks */
+.confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 50; pointer-events: none; }
+
+/* ------------------------------------------------------------ menu bar: auto-hide */
+
+.w-menubar { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.28s ease; }
+body.mb-auto:not(.mb-show) .w-menubar { transform: translateY(-105%); opacity: 0; pointer-events: none; }

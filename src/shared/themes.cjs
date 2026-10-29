@@ -3,22 +3,10 @@
 
 const THEMES = [
   {
-    id: 'aurora',
-    name: 'Aurora',
-    tagline: 'Soft northern lights behind frosted glass',
-    swatch: ['#0b1026', '#7c5cff', '#2ee6c5'],
-  },
-  {
     id: 'midnight',
     name: 'Midnight',
     tagline: 'Pure black, hairline type, one warm accent',
     swatch: ['#000000', '#1c1c1e', '#ff8a3d'],
-  },
-  {
-    id: 'terminal',
-    name: 'Terminal',
-    tagline: 'Phosphor green CRT for people who live in the CLI',
-    swatch: ['#050a06', '#0f1f13', '#39ff88'],
   },
   {
     id: 'cartoon',
@@ -45,12 +33,6 @@ const THEMES = [
     swatch: ['#f3efe6', '#1d1b17', '#c2410c'],
   },
   {
-    id: 'synthwave',
-    name: 'Synthwave',
-    tagline: 'Neon grid racing into an 80s sunset',
-    swatch: ['#1a0533', '#ff2fb9', '#2de2ff'],
-  },
-  {
     id: 'zen',
     name: 'Zen',
     tagline: 'Sand, sage and a slowly breathing ensō',
@@ -63,40 +45,10 @@ const THEMES = [
     swatch: ['#008080', '#c0c0c0', '#000080'],
   },
   {
-    id: 'bhakti',
-    name: 'Bhakti',
-    tagline: 'Diyas, marigolds and a daily public-domain darshan',
-    swatch: ['#1c0806', '#e8a23a', '#f4e3c3'],
-  },
-  {
-    id: 'pastel',
-    name: 'Pastel',
-    tagline: 'Soft lavender, peach and mint blooms',
-    swatch: ['#f6f1fb', '#c9b8f5', '#ffc9b5'],
-  },
-  {
-    id: 'ocean',
-    name: 'Ocean',
-    tagline: 'Rolling waves, a quiet moon and rising bubbles',
-    swatch: ['#071a2b', '#1f6f99', '#5cf2c4'],
-  },
-  {
     id: 'sakura',
     name: 'Sakura',
     tagline: 'Cherry blossoms, falling petals and a red sun',
     swatch: ['#fbeff1', '#f2a7bb', '#c8364f'],
-  },
-  {
-    id: 'orbit',
-    name: 'Orbit',
-    tagline: 'A tiny solar system turning on thin rings',
-    swatch: ['#0a0c18', '#ffcc66', '#7aa2ff'],
-  },
-  {
-    id: 'forest',
-    name: 'Forest',
-    tagline: 'Pine ridges, drifting mist and fireflies',
-    swatch: ['#142026', '#3f6b4f', '#f2c94c'],
   },
   {
     id: 'astro',

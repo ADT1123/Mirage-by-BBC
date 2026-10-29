@@ -13,12 +13,14 @@ const WIDGETS = [
   { type: 'calendar', name: 'Calendar', desc: 'This month at a glance' },
   { type: 'countdown', name: 'Countdown', desc: 'Days left until something big' },
   { type: 'quote', name: 'Quote', desc: 'A line to keep you going' },
-  { type: 'menubar', name: 'Menu Bar', desc: 'Top bar: Control Center, calendar, Spotlight' },
   { type: 'dock', name: 'Dock', desc: 'Your apps, one click away' },
   { type: 'stack', name: 'Smart Stack', desc: 'Several widgets in one card that takes turns' },
   { type: 'music', name: 'Now Playing', desc: 'What’s playing, with controls and a full-screen player' },
   { type: 'art', name: 'Darshan', desc: 'A public-domain devotional painting, new each day' },
   { type: 'verse', name: 'Gita Verse', desc: 'A Bhagavad Gita shloka with meaning, daily' },
+  { type: 'photo', name: 'Photo', desc: 'Your own photo, or an album that changes on its own' },
+  { type: 'sticker', name: 'Emoji', desc: 'A big emoji or a few words, like an iPhone sticker' },
+  { type: 'memories', name: 'On This Day', desc: 'A photo from this date in past years, from your Pictures' },
   { type: 'assistant', name: 'Assistant', desc: 'Chat with your private AI; it can also organize your notes and to-dos' },
   { type: 'stocks', name: 'Stocks', desc: 'Live prices and day change for your watchlist' },
 ];
@@ -43,6 +45,10 @@ function defaultsFor(type) {
     }
     case 'quote':
       return { text: '', author: '' };
+    case 'photo':
+      return { photos: [], every: 0 };
+    case 'sticker':
+      return { text: '✨', plain: false };
     case 'stocks':
       return { symbols: ['^NSEI', '^BSESN', 'RELIANCE.NS', 'TCS.NS'] };
     case 'stack':
@@ -61,7 +67,6 @@ function make(type, x, y, extra = {}) {
 // Tuned on a 16:10 grid (108 x 67.5 rem): a 43.4rem column splits into two 20.9rem cards.
 const ARRANGEMENTS = {
   studio: () => [
-    make('menubar', 0, 0),
     make('clock', 0.085, 0.17),
     make('music', 0.085, 0.5),
     make('quote', 0.085, 0.79),
@@ -109,22 +114,14 @@ const ARRANGEMENTS = {
 };
 
 const THEME_ARRANGEMENT = {
-  aurora: 'studio',
   midnight: 'studio',
   weather: 'studio',
-  synthwave: 'studio',
-  terminal: 'dev',
   retro: 'dev',
   cartoon: 'playful',
   blast: 'playful',
   paper: 'calm',
   zen: 'calm',
-  bhakti: 'divine',
-  pastel: 'studio',
-  ocean: 'studio',
-  orbit: 'studio',
   sakura: 'calm',
-  forest: 'calm',
   astro: 'astro',
 };
 

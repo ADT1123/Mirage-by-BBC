@@ -79,8 +79,13 @@ body {
 
 .sc { position: absolute; inset: 0; overflow: hidden; }
 
-[data-motion='off'] *, [data-motion='off'] *::before, [data-motion='off'] *::after {
-  animation-play-state: paused !important;
+/* Animations off: every animation jumps straight to its end, so things that fade or slide in
+   still appear (freezing them at the first frame would leave them invisible). The album-art
+   wallpaper keeps moving; it has its own switch. */
+[data-motion='off'] *:not(.aw-bg > i), [data-motion='off'] *::before, [data-motion='off'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
 }
 
 /* ------------------------------------------------------------ widget shell */

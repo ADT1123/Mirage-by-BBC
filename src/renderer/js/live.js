@@ -12,6 +12,23 @@ export function enableLive(app) {
     target?.click();
   });
 
+  // the menu bar hides itself (unless pinned) and slides down when the mouse reaches the top edge.
+  // Only real positions on the desktop count: moving into a popup (Control Center, calendar)
+  // sends no position here, so the bar stays while you use it.
+  let barTimer = 0;
+  document.addEventListener('mousemove', (e) => {
+    if (!document.body.classList.contains('mb-auto') || e.clientX < 0 || e.clientY < 0) return;
+    const bar = document.querySelector('.w-menubar');
+    const h = bar ? bar.getBoundingClientRect().height : 32;
+    if (e.clientY <= 4) {
+      clearTimeout(barTimer);
+      document.body.classList.add('mb-show');
+    } else if (e.clientY > h + 24 && document.body.classList.contains('mb-show')) {
+      clearTimeout(barTimer);
+      barTimer = setTimeout(() => document.body.classList.remove('mb-show'), 500);
+    } else if (e.clientY <= h + 24) clearTimeout(barTimer);
+  });
+
   // website links light up only while Ctrl is held
   const ctrlHeld = (on) => document.body.classList.toggle('ctrl-held', on);
   document.addEventListener('mousemove', (e) => ctrlHeld(e.ctrlKey));

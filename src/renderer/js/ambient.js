@@ -2,8 +2,12 @@
 //  - real weather: rain, snow or a storm falling over any theme when it's happening outside
 //  - the season: cherry petals, summer light, falling leaves or snow (picked, or from the calendar)
 //  - a desktop pet that strolls along the dock and reacts when you click it
+//  - the album-art wallpaper: a slow, blurred version of the cover while music plays
+//  - confetti when you finish your to-dos or a countdown reaches zero
 
-let layer; // behind the widgets: season tint + season canvas + weather canvas
+import { extractPalette, fallbackPalette } from './player.js';
+
+let layer; // behind the widgets: album art + season tint + season canvas + weather canvas
 let stage;
 let fx = null;
 let pet = null;
@@ -12,7 +16,7 @@ export function mountAmbient(stageEl) {
   stage = stageEl;
   layer = document.createElement('div');
   layer.id = 'ambient';
-  layer.innerHTML = '<div class="season-tint"></div><canvas class="season"></canvas><canvas class="fx"></canvas>';
+  layer.innerHTML = '<div class="album-wall"><div class="aw-bg"><i class="art-layer a1"></i><i class="art-layer a2"></i><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><i class="blob b4"></i></div><div class="aw-bg"><i class="art-layer a1"></i><i class="art-layer a2"></i><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><i class="blob b4"></i></div><b></b></div><div class="season-tint"></div><canvas class="season"></canvas><canvas class="fx"></canvas>';
   stageEl.before(layer);
 }
 
@@ -23,6 +27,110 @@ export function updateAmbient(c) {
   updateWeather(c, motion);
   updateSeason(c, motion);
   updatePet(c, motion);
+  updateAlbum(c);
+}
+
+// ------------------------------------------------------------------ album-art wallpaper
+// The same living background as the Now Playing screen: blurred copies of the cover that
+// slowly turn, with four soft blobs of the cover's own colors drifting over them. It fades in
+// while music plays and back to your theme a little after it pauses or stops.
+
+// two copies of the background: the next song is painted into the hidden one, which then
+// slowly cross-fades over the current one
+const album = { art: '', on: false, offTimer: 0, front: 0 };
+function paintAlbum(wall, m) {
+  const stacks = wall.querySelectorAll('.aw-bg');
+  const bg = stacks[album.front ^ 1];
+  const set = (palette, art) => {
+    palette.forEach((c, i) => bg.style.setProperty(`--p${i + 1}`, c));
+    bg.style.setProperty('--tint', palette[3]);
+    bg.querySelectorAll('.art-layer').forEach((l) => (l.style.backgroundImage = `url("${art.replace(/"/g, '%22')}")`));
+    album.front ^= 1;
+    stacks[album.front].classList.add('front');
+    stacks[album.front ^ 1].classList.remove('front');
+  };
+  const im = new Image();
+  im.crossOrigin = 'anonymous';
+  im.onload = () => {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 16;
+      const g = cv.getContext('2d');
+      g.drawImage(im, 0, 0, 16, 16);
+      set(extractPalette(g.getImageData(0, 0, 16, 16).data), cv.toDataURL());
+    } catch {
+      set(fallbackPalette(m.title || 'music'), m.art);
+    }
+  };
+  im.onerror = () => set(fallbackPalette(m.title || 'music'), m.art);
+  im.src = m.art;
+}
+function updateAlbum(c) {
+  const m = c.store.media;
+  const wall = layer.querySelector('.album-wall');
+  const wanted = c.cfg.albumWall !== false && !c.edit && m?.active && m.art;
+  if (wanted && m.art !== album.art) {
+    album.art = m.art;
+    paintAlbum(wall, m);
+  }
+  wall.classList.toggle('playing', !!m?.playing);
+  const show = !!(wanted && m.playing);
+  clearTimeout(album.offTimer);
+  if (show && !album.on) {
+    album.on = true;
+    wall.classList.add('on');
+  } else if (!show && album.on) {
+    // paused: wait a moment (a quick pause shouldn't flash the theme back)
+    album.offTimer = setTimeout(() => {
+      album.on = false;
+      wall.classList.remove('on');
+    }, wanted ? 8000 : 600);
+  }
+}
+
+// ------------------------------------------------------------------ confetti
+
+export function confetti() {
+  const root = document.documentElement;
+  if (root.dataset.motion === 'off' || root.hasAttribute('data-paused')) return;
+  const cv = document.createElement('canvas');
+  cv.className = 'confetti';
+  document.body.append(cv);
+  const W = (cv.width = innerWidth);
+  const H = (cv.height = innerHeight);
+  const g = cv.getContext('2d');
+  const accent = getComputedStyle(root).getPropertyValue('--accent').trim() || '#ff8a3d';
+  const colors = [accent, '#ffd60a', '#30d158', '#0a84ff', '#ff375f', '#bf5af2', '#ffffff'];
+  const n = root.dataset.perf === 'saver' ? 90 : 180;
+  const bits = Array.from({ length: n }, (_, i) => {
+    const fromLeft = i % 2 === 0; // two cannons, from the bottom corners
+    const a = (fromLeft ? -60 : -120) * (Math.PI / 180) + (Math.random() - 0.5) * 0.7;
+    const v = (0.9 + Math.random() * 0.6) * H * 0.0024;
+    return { x: fromLeft ? W * 0.05 : W * 0.95, y: H * 0.95, vx: Math.cos(a) * v * 16, vy: Math.sin(a) * v * 16, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3, w: 6 + Math.random() * 6, h: 3 + Math.random() * 4, c: colors[i % colors.length] };
+  });
+  const start = performance.now();
+  const frame = (t) => {
+    const dt = 1;
+    g.clearRect(0, 0, W, H);
+    for (const b of bits) {
+      b.vy += 0.32 * dt;
+      b.vx *= 0.992;
+      b.vy *= 0.992;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.r += b.vr;
+      g.save();
+      g.translate(b.x, b.y);
+      g.rotate(b.r);
+      g.scale(1, Math.cos(t / 120 + b.r)); // the flutter
+      g.fillStyle = b.c;
+      g.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+      g.restore();
+    }
+    if (t - start < 4200) requestAnimationFrame(frame);
+    else cv.remove();
+  };
+  requestAnimationFrame(frame);
 }
 
 // ------------------------------------------------------------------ weather on the desktop

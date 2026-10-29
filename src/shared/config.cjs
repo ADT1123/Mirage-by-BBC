@@ -15,7 +15,7 @@ const PORT = Number(process.env.WALL_PORT) || 47391;
 function defaults() {
   return {
     version: 1,
-    theme: 'aurora',
+    theme: 'midnight',
     name: '',
     clock24: false,
     appearance: 'auto', // 'auto' follows Windows light/dark; or 'light' / 'dark'
@@ -23,6 +23,7 @@ function defaults() {
     planet: 'moon', // Astronomy theme: moon | mars | earth
     weatherFx: 'auto', // rain/snow over the desktop when it's really happening: auto | off | rain | snow | storm
     pet: 'cat', // a little desktop pet on the dock: cat | bird | off
+    menubarFixed: true, // false = the menu bar hides and slides down at the top edge
     perf: 'auto', // auto | saver | full: auto saves power on battery and on modest laptops
     season: 'off', // only when you pick one: spring | summer | autumn | winter | auto (follows the calendar) | off
     ai: { model: 'llama3.1:8b' }, // local model served by Ollama
@@ -35,7 +36,7 @@ function defaults() {
     hotkey: 'Alt+W',
     autostart: false,
     onboarded: false, // shows a how-to hint on the wallpaper until the editor is opened once
-    widgets: presetLayout('aurora'),
+    widgets: presetLayout('midnight'),
   };
 }
 
@@ -45,7 +46,7 @@ function load() {
   try {
     const raw = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     const cfg = { ...defaults(), ...raw };
-    if (!byId(cfg.theme)) cfg.theme = 'aurora';
+    if (!byId(cfg.theme)) cfg.theme = 'midnight'; // includes themes that were retired
     if (!Array.isArray(cfg.widgets)) cfg.widgets = presetLayout(cfg.theme);
     return cfg;
   } catch {

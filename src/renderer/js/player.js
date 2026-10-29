@@ -172,7 +172,7 @@ export function start(env = {}) {
     lyr.data = data;
     if (data?.synced?.length) lyrBox.innerHTML = data.synced.map((l, i) => `<p class="np-line" data-i="${i}">${esc(l.text) || '♪'}</p>`).join('');
     else if (data?.plain) lyrBox.innerHTML = `<p class="np-plain">${esc(data.plain).replace(/\n/g, '<br>')}</p>`;
-    else lyrBox.innerHTML = `<p class="np-lmsg">${data?.instrumental ? 'Instrumental' : data?.offline ? 'Lyrics need an internet connection' : 'No lyrics found for this song'}</p>`;
+    else lyrBox.innerHTML = `<p class="np-lmsg">${data?.instrumental ? 'Instrumental' : data?.blocked ? 'This network blocks the lyrics service.<br><small>Lyrics load on other Wi-Fi or a hotspot, and are kept after that.</small>' : data?.offline ? 'Lyrics need an internet connection' : 'No lyrics found for this song'}</p>`;
   };
   const syncLyrics = () => {
     const lines = lyr.data?.synced;
@@ -381,7 +381,7 @@ function rgbToHsl(r, g, b) {
 
 // The artwork's dominant colors, weighted by how much of the cover they fill, then toned
 // down into deep, muted shades so the backdrop flatters the art instead of shouting.
-function extractPalette(data) {
+export function extractPalette(data) {
   const buckets = new Map();
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
@@ -406,7 +406,7 @@ function extractPalette(data) {
   return [tone(picks[0]), tone(picks[1], 0.03), tone(picks[2], -0.02), tone(picks[0], -0.12)];
 }
 
-function fallbackPalette(seed) {
+export function fallbackPalette(seed) {
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return [`hsl(${h} 70% 45%)`, `hsl(${(h + 40) % 360} 75% 38%)`, `hsl(${(h + 300) % 360} 60% 34%)`, `hsl(${(h + 180) % 360} 55% 30%)`];

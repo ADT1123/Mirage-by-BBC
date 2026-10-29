@@ -141,7 +141,62 @@ async function lookupArt(title, artist) {
   return found;
 }
 
+// the cover's most striking color, tuned to work as an accent (not too dark, not washed out)
+const colorCache = new Map();
+async function coverColor(art) {
+  const key = art.length > 300 ? `${art.slice(0, 120)}|${art.length}` : art;
+  if (colorCache.has(key)) return colorCache.get(key);
+  let hex = null;
+  try {
+    const { nativeImage } = require('electron');
+    const img = art.startsWith('data:') ? nativeImage.createFromDataURL(art) : nativeImage.createFromBuffer(Buffer.from(await (await fetch(art)).arrayBuffer()));
+    const px = img.resize({ width: 32, height: 32 }).toBitmap(); // BGRA
+    const buckets = Array.from({ length: 12 }, () => ({ w: 0, r: 0, g: 0, b: 0 }));
+    for (let i = 0; i < px.length; i += 4) {
+      const b = px[i] / 255;
+      const g = px[i + 1] / 255;
+      const r = px[i + 2] / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const s = max === min ? 0 : (max - min) / (1 - Math.abs(2 * l - 1));
+      if (s < 0.25 || l < 0.15 || l > 0.85) continue; // skip greys, black, white
+      const h = max === r ? ((g - b) / (max - min) + 6) % 6 : max === g ? (b - r) / (max - min) + 2 : (r - g) / (max - min) + 4;
+      const k = buckets[Math.floor(h * 2) % 12];
+      k.w += s;
+      k.r += r * s;
+      k.g += g * s;
+      k.b += b * s;
+    }
+    const best = buckets.reduce((a, b) => (b.w > a.w ? b : a));
+    if (best.w > 0) {
+      let [r, g, b] = [best.r / best.w, best.g / best.w, best.b / best.w];
+      // lift dark colors so they read as an accent on dark themes
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (lum < 0.45) [r, g, b] = [r, g, b].map((v) => v + (1 - v) * (0.45 - lum));
+      hex = `#${[r, g, b].map((v) => Math.round(Math.min(1, v) * 255).toString(16).padStart(2, '0')).join('')}`;
+    }
+  } catch {}
+  colorCache.set(key, hex);
+  if (colorCache.size > 40) colorCache.delete(colorCache.keys().next().value);
+  return hex;
+}
+
+let colorFor = '';
 function emit() {
+  // work out the cover color once per cover, then tell everyone again
+  if (state.art && state.art !== colorFor) {
+    colorFor = state.art;
+    const art = state.art;
+    coverColor(art).then((hex) => {
+      if (state.art !== art) return;
+      state = { ...state, color: hex };
+      for (const fn of listeners) fn(state);
+    });
+  } else if (state.art === colorFor && !state.color && colorCache.size) {
+    const k = colorFor.length > 300 ? `${colorFor.slice(0, 120)}|${colorFor.length}` : colorFor;
+    if (colorCache.get(k)) state = { ...state, color: colorCache.get(k) };
+  }
   for (const fn of listeners) fn(state);
   trackPlay();
   updateHistoryArt();

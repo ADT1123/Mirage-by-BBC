@@ -391,11 +391,11 @@ export const COMMANDS = [
   },
   {
     name: 'appearance',
-    args: 'auto | light | dark',
+    args: 'auto | light | dark | sun',
     desc: 'Light or dark version of every theme (auto follows Windows)',
     complete: () => [{ value: 'auto', desc: 'follow Windows' }, { value: 'light', desc: '' }, { value: 'dark', desc: '' }],
     async run([v]) {
-      if (!['auto', 'light', 'dark'].includes(v)) return fail('Use /appearance auto, light or dark');
+      if (!['auto', 'light', 'dark', 'sun'].includes(v)) return fail('Use /appearance auto, light, dark or sun (follows sunrise and sunset)');
       const extra = await change((c) => ((c.appearance = v), c));
       return ok(v === 'auto' ? 'Appearance follows Windows' : `${v[0].toUpperCase() + v.slice(1)} appearance`, ['Every theme has a light and a dark version'], extra);
     },

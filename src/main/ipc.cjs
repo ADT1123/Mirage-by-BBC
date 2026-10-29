@@ -6,6 +6,7 @@ const git = require('./git.cjs');
 const weather = require('./weather.cjs');
 const feeds = require('./feeds.cjs');
 const stocks = require('./stocks.cjs');
+const memories = require('./memories.cjs');
 const native = require('./native.cjs');
 const { THEMES } = require('../shared/themes.cjs');
 const brand = require('../shared/brand.cjs');
@@ -64,12 +65,21 @@ function register(hooks = {}) {
   ipcMain.handle('data:quote', (_e, every) => feeds.quote(every));
   ipcMain.handle('data:verse', (_e, every) => feeds.verse(every));
   ipcMain.handle('data:power', () => native.powerStatus());
+  ipcMain.handle('data:memories', () => memories.get().catch(() => ({ kind: 'none', photos: [] })));
   ipcMain.handle('data:stocks', (_e, symbols) => stocks.quotes(Array.isArray(symbols) ? symbols : []));
   ipcMain.handle('data:art', async () => {
     const a = await feeds.art();
     return a ? { ...a, url: pathToFileURL(a.file).href } : null;
   });
   ipcMain.handle('data:system', () => ({ cpu: cpuUsage(), mem: 1 - os.freemem() / os.totalmem() }));
+  ipcMain.handle('dialog:images', async (e) => {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
+      title: 'Choose photos',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'] }],
+    });
+    return r.canceled ? [] : r.filePaths;
+  });
   ipcMain.handle('dialog:image', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const r = await dialog.showOpenDialog(win, {

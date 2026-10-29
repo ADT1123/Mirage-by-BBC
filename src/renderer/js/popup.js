@@ -4,7 +4,8 @@
 
 import { WIDGETS, esc } from './widgets.js';
 import { icon, weatherIcon } from './icons.js';
-import { renderWidgetForm, TINTS } from './widgetform.js';
+import { renderWidgetForm, TINTS, FONTS } from './widgetform.js';
+import { fileUrl } from './widgets.js';
 
 let cfg;
 let info;
@@ -24,6 +25,7 @@ function syncLook() {
   const root = document.documentElement;
   const a = cfg.appearance || 'auto';
   root.dataset.theme = cfg.theme;
+  if (a === 'sun') return; // app.js keeps 'sun' up to date with the real sunrise/sunset
   root.dataset.appearance = a === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : a;
 }
 
@@ -86,10 +88,29 @@ function note(root, id, scale) {
     <div class="pop-tools">
       ${info.noteColors.map((c) => `<button class="nc${c === w.color ? ' on' : ''}" data-color="${c}" title="${c}"></button>`).join('')}
       <span class="sep"></span>
+      <button class="pt-btn" data-act="ai" title="AI: polish, summarize, make to-dos">${icon('sparkle')}</button>
       <button class="pt-btn" data-act="delete" title="Delete note">${icon('trash')}</button>
       <button class="pt-btn pt-done" data-act="done">Done</button>
-    </div>`;
+    </div>
+    <div class="pop-ai" hidden><button data-ai="polish">Polish</button><button data-ai="summarize">Summarize</button><button data-ai="todos">Make to-dos</button><small data-k="aimsg"></small></div>`;
   const text = root.querySelector('.note-text');
+  // ✨ note helpers: the result replaces the note text (Polish / Summarize) or adds to-dos
+  root.querySelector('.pop-ai').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-ai]');
+    if (!b || !w.text?.trim()) return;
+    const msg = root.querySelector('[data-k="aimsg"]');
+    msg.textContent = 'Thinking…';
+    const r = await window.wall.aiNote(b.dataset.ai, w.text);
+    if (!r?.ok) return (msg.textContent = r?.reply || 'The AI is not available');
+    if (b.dataset.ai === 'todos') msg.textContent = (r.done || []).length ? `Added ${r.done.length} to-do${r.done.length === 1 ? '' : 's'}` : r.reply;
+    else {
+      w.text = r.reply;
+      text.innerText = r.reply;
+      save();
+      msg.textContent = 'Done';
+    }
+    fit();
+  });
   text.addEventListener('input', () => {
     w.text = text.innerText.replace(/\n{3,}/g, '\n\n').replace(/\n$/, '');
     save();
@@ -108,6 +129,11 @@ function note(root, id, scale) {
       cfg.widgets = cfg.widgets.filter((x) => x.id !== id);
       save();
       close();
+    }
+    if (b.dataset.act === 'ai') {
+      const row = root.querySelector('.pop-ai');
+      row.hidden = !row.hidden;
+      fit();
     }
     if (b.dataset.act === 'done') close();
   });
@@ -128,7 +154,7 @@ function todo(root, id, scale) {
   if (!w) return close();
   const paint = () => {
     root.innerHTML = `<div class="pop-widget" style="--s:${scale}">${WIDGETS.todo.render(w, ctx())}</div>
-      <div class="pop-tools"><span class="pt-hint">Enter adds · click to tick</span><span class="sep"></span><button class="pt-btn pt-done" data-act="done">Done</button></div>`;
+      <div class="pop-tools"><span class="pt-hint">Enter adds · click to tick</span><span class="sep"></span><button class="pt-btn pt-ai" data-act="prioritize" title="AI: sort by urgency">${icon('sparkle')}Prioritize</button><button class="pt-btn pt-done" data-act="done">Done</button></div>`;
     const add = root.querySelector('.todo-add');
     add.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && add.value.trim()) {
@@ -145,8 +171,22 @@ function todo(root, id, scale) {
     });
     setTimeout(() => add.focus(), 0);
   };
-  root.addEventListener('click', (e) => {
+  root.addEventListener('click', async (e) => {
     if (e.target.closest('[data-act="done"]')) return close();
+    // ✨ Prioritize: the AI reorders the list, then we show the new order here
+    const pri = e.target.closest('[data-act="prioritize"]');
+    if (pri) {
+      pri.textContent = 'Sorting…';
+      const r = await window.wall.aiAsk('Sort my to-dos by urgency');
+      const fresh = (await window.wall.getConfig()).widgets.find((x) => x.id === id);
+      if (r?.ok && fresh) {
+        w.items = fresh.items;
+        paint();
+        return fit();
+      }
+      pri.textContent = 'AI unavailable';
+      return;
+    }
     const del = e.target.closest('.todo-del');
     if (del) {
       w.items.splice(Number(del.dataset.i), 1);
@@ -465,7 +505,7 @@ function widgetEdit(root, id) {
 
 // ---------------------------------------------------------------- wallpaper settings (from the top bar)
 
-const QUICK_WIDGETS = ['stocks', 'clock', 'commits', 'feed', 'note', 'todo', 'weather', 'music', 'year', 'calendar', 'countdown', 'quote', 'system', 'dock', 'menubar'];
+const QUICK_WIDGETS = ['photo', 'sticker', 'memories', 'assistant', 'stocks', 'clock', 'commits', 'feed', 'note', 'todo', 'weather', 'music', 'year', 'calendar', 'countdown', 'quote', 'system', 'dock'];
 
 function settings(root) {
   const fmt = (k) => (k || '').replace('CommandOrControl', 'Ctrl');
@@ -545,11 +585,13 @@ function settings(root) {
           .join('')}</div>
 
         <div class="sm-card">
-          <div class="sm-row"><span>Appearance</span>${seg('appearance', cfg.appearance || 'auto', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']])}</div>
+          <div class="sm-row"><span>Appearance</span>${seg('appearance', cfg.appearance || 'auto', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark'], ['sun', 'Sun']])}</div>
           <div class="sm-row"><span>Accent</span><span class="sm-dots"><button data-accent="" class="auto${!cfg.accent ? ' on' : ''}" title="Theme color"></button>${Object.entries(TINTS)
             .filter(([k]) => !['graphite', 'white'].includes(k))
             .map(([k, c]) => `<button data-accent="${k}" class="${cfg.accent === k ? 'on' : ''}" style="--c:${c}" title="${k}"></button>`)
-            .join('')}</span></div>
+            .join('')}<button data-accent="song" class="song${cfg.accent === 'song' ? ' on' : ''}" title="Follow the album art of what's playing">${icon('music')}</button><label class="sm-anycolor${/^#/.test(cfg.accent || '') ? ' on' : ''}" title="Any color" style="${/^#/.test(cfg.accent || '') ? `--c:${cfg.accent}` : ''}"><input type="color" data-anyaccent value="${/^#/.test(cfg.accent || '') ? cfg.accent : '#ff6b6b'}" /></label></span></div>
+          <div class="sm-row"><span>Background</span>${seg('bgmode', cfg.background ? 'photo' : 'theme', [['theme', 'Theme'], ['photo', cfg.background ? 'Change…' : 'Photo…']])}</div>
+          ${cfg.background ? `<div class="sm-row"><span class="sm-thumb" style="background-image:url('${fileUrl(cfg.background).replace(/'/g, '%27')}')"></span><span>Dim</span><input type="range" min="0" max="0.8" step="0.05" data-dim value="${cfg.dim ?? 0.25}" /></div>` : ''}
           ${cfg.theme === 'astro' ? `<div class="sm-row"><span>Planet</span>${seg('planet', cfg.planet || 'moon', [['moon', 'Moon'], ['mars', 'Mars'], ['earth', 'Earth']])}</div>` : ''}
         </div>
 
@@ -574,8 +616,16 @@ function settings(root) {
         </div>
 
         <div class="sm-card">
+          <div class="sm-row sm-stack"><span>All widgets · style</span>${seg('allstyle', null, [['theme', 'Theme'], ['glass', 'Glass'], ['solid', 'Solid'], ['clear', 'Clear']])}</div>
+          <div class="sm-row sm-stack"><span>All widgets · corners</span>${seg('allcorners', null, [['', 'Theme'], ['round', 'Round'], ['soft', 'Soft'], ['square', 'Square']])}</div>
+          <div class="sm-row sm-stack"><span>All widgets · font</span>${seg('allfont', null, [['', 'Theme'], ...Object.entries(FONTS).slice(0, 4).map(([k, f]) => [k, f.label])])}</div>
+        </div>
+
+        <div class="sm-card">
           ${sw('motion', 'Animations', cfg.motion !== false)}
           ${sw('weatherFx', 'Live weather', cfg.weatherFx !== 'off')}
+          ${sw('menubarFixed', 'Always show menu bar', cfg.menubarFixed !== false)}
+          ${sw('albumWall', 'Album art wallpaper', cfg.albumWall !== false)}
           ${sw('visualizer', 'Music visualizer', cfg.visualizer !== false)}
           ${sw('clock24', '24-hour clock', !!cfg.clock24)}
           ${sw('taskbar', 'Hide taskbar', !!taskbar)}
@@ -652,6 +702,17 @@ function settings(root) {
     }
     if (b.dataset.theme) cfg.theme = b.dataset.theme;
     if (b.dataset.appearance) cfg.appearance = b.dataset.appearance;
+    if (b.dataset.bgmode === 'theme') cfg.background = null;
+    if (b.dataset.bgmode === 'photo') {
+      const file = await window.wall.pickImage();
+      if (!file) return;
+      cfg.background = file;
+    }
+    // apply one look to every widget (the menu bar and dock keep their own)
+    const every = (fn) => cfg.widgets.filter((w) => !['menubar', 'dock'].includes(w.type)).forEach(fn);
+    if (b.dataset.allstyle !== undefined) every((w) => (w.style = b.dataset.allstyle));
+    if (b.dataset.allcorners !== undefined) every((w) => (b.dataset.allcorners ? (w.corners = b.dataset.allcorners) : delete w.corners));
+    if (b.dataset.allfont !== undefined) every((w) => (b.dataset.allfont ? (w.font = b.dataset.allfont) : delete w.font));
     if (b.dataset.planet) cfg.planet = b.dataset.planet;
     if (b.dataset.widget) {
       const type = b.dataset.widget;
@@ -667,15 +728,25 @@ function settings(root) {
         taskbar = await window.wall.sysSet('taskbar', !taskbar);
         return paint();
       }
-      if (k === 'motion' || k === 'visualizer') cfg[k] = cfg[k] === false;
+      if (k === 'motion' || k === 'visualizer' || k === 'albumWall' || k === 'menubarFixed') cfg[k] = cfg[k] === false;
       else if (k === 'weatherFx') cfg.weatherFx = cfg.weatherFx === 'off' ? 'auto' : 'off';
       else cfg[k] = !cfg[k];
     }
     save();
     paint();
   });
+  root.addEventListener('input', (e) => {
+    if (e.target.dataset.dim === undefined) return;
+    cfg.dim = Number(e.target.value);
+    save();
+  });
   root.addEventListener('change', (e) => {
     const t = e.target;
+    if (t.dataset.anyaccent !== undefined) {
+      cfg.accent = t.value;
+      save();
+      return paint();
+    }
     if (t.dataset.field === 'name') {
       cfg.name = t.value.trim();
       save();

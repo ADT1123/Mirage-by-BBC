@@ -75,13 +75,6 @@ function asciiBar(frac, width = 22) {
   return `<b>${'━'.repeat(n)}</b><i>${'─'.repeat(width - n)}</i>`;
 }
 
-// ---------------------------------------------------------------- clock
-function greetingHi(h) {
-  if (h < 12) return 'सुप्रभात';
-  if (h < 17) return 'शुभ दोपहर';
-  if (h < 21) return 'शुभ संध्या';
-  return 'शुभ रात्रि';
-}
 
 function greeting(h) {
   if (h < 5) return 'Burning the midnight oil';
@@ -144,7 +137,7 @@ const clock = {
     set(el, 'time', time, true);
     set(el, 'date', now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }));
     const name = ctx.cfg.name || ctx.info.user;
-    const hello = ctx.cfg.theme === 'bhakti' ? greetingHi(now.getHours()) : greeting(now.getHours());
+    const hello = greeting(now.getHours());
     set(el, 'greet', name ? `${hello}, ${name}` : hello);
   },
 };
@@ -474,6 +467,47 @@ function menuLeft(ctx) {
   return repo ? `<span class="mb-repo mb-item" data-act="projects" title="Your projects">${esc(repo)}${icon('chevron', 'mb-caret')}</span>` : '';
 }
 
+// ---------------------------------------------------------------- your own photos and emoji
+
+// a local path as a file:// URL the page can show
+export function fileUrl(p) {
+  const s = String(p || '').replace(/\\/g, '/');
+  const parts = s.split('/').map((x, i) => (i === 0 && /^[A-Za-z]:$/.test(x) ? x : encodeURIComponent(x)));
+  return (s.startsWith('/') ? 'file://' : 'file:///') + parts.join('/');
+}
+
+// which photo shows now: albums move on every `every` minutes
+export function photoNow(w, now = Date.now()) {
+  const list = w.photos || [];
+  if (!list.length) return null;
+  const slot = w.every ? Math.floor(now / (w.every * 60000)) : 0;
+  return list[slot % list.length];
+}
+
+const photo = {
+  render(w) {
+    const p = photoNow(w);
+    return p
+      ? `<div class="card photo-card" style="background-image:url('${fileUrl(p).replace(/'/g, '%27')}')"></div>`
+      : `<div class="card photo-card empty"><span>${icon('image')}</span><small>Add photos in Edit widget</small></div>`;
+  },
+};
+
+// On This Day: cycles through photos from this date (or this week) in past years
+const memories = {
+  render(w, ctx) {
+    const m = ctx.store.memories;
+    if (!m) return `<div class="card photo-card empty"><span>${icon('image')}</span><small>Finding your memories…</small></div>`;
+    if (!m.photos.length) return `<div class="card photo-card empty"><span>${icon('image')}</span><small>Photos in your Pictures folder show up here</small></div>`;
+    const p = m.photos[Math.floor(Date.now() / ((w.every || 15) * 60000)) % m.photos.length];
+    return `<div class="card photo-card mem" data-act="open-photo" data-arg="${esc(p.file)}" style="background-image:url('${fileUrl(p.file).replace(/'/g, '%27')}')"><span class="mem-label">${esc(p.label)}</span></div>`;
+  },
+};
+
+const sticker = {
+  render: (w) => `<div class="${w.plain ? 'sticker plain' : 'card sticker'}"><span>${esc(w.text || '✨')}</span></div>`,
+};
+
 // ---------------------------------------------------------------- assistant
 
 const assistant = {
@@ -652,12 +686,14 @@ const stack = {
   },
 };
 
-export const WIDGETS = { assistant, stocks, clock, commits, feed, note, todo, weather, year, system, calendar, countdown, quote, menubar, art, verse, dock, music, stack };
+export const WIDGETS = { memories, photo, sticker, assistant, stocks, clock, commits, feed, note, todo, weather, year, system, calendar, countdown, quote, menubar, art, verse, dock, music, stack };
 
 // ---------------------------------------------------------------- Apple-style sizes
 // Small = a square tile, Medium = two squares wide. Each widget gets its own compact design.
 
 export const SHAPES = {
+  photo: ['small', 'medium'],
+  memories: ['small', 'medium'],
   clock: ['small'],
   calendar: ['small'],
   weather: ['small', 'medium'],
@@ -681,6 +717,14 @@ function sparkArea(points, up) {
 const fmtPrice = (s) => s.price.toLocaleString(s.currency === 'INR' ? 'en-IN' : 'en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
 export const SHAPED = {
+  memories: {
+    small: (w, ctx) => memories.render(w, ctx).replace('card photo-card', 'card sq photo-card'),
+    medium: (w, ctx) => memories.render(w, ctx).replace('card photo-card', 'card sq-wide photo-card'),
+  },
+  photo: {
+    small: (w) => photo.render(w).replace('card photo-card', 'card sq photo-card'),
+    medium: (w) => photo.render(w).replace('card photo-card', 'card sq-wide photo-card'),
+  },
   clock: {
     small: () => `<div class="card sq sq-clock">${analogFace()}</div>`,
   },

@@ -101,6 +101,33 @@ function apply(cfg, actions = []) {
         done.push(`Countdown: ${text} on ${a.date}`);
         break;
       }
+      case 'set_appearance':
+        if (['auto', 'light', 'dark', 'sun'].includes(text)) {
+          cfg.appearance = text;
+          done.push(`Appearance: ${text}`);
+        }
+        break;
+      case 'set_accent': {
+        const v = text.toLowerCase();
+        if (v === 'theme') delete cfg.accent;
+        else if (v === 'song' || /^#[0-9a-f]{6}$/.test(v) || ['blue', 'indigo', 'purple', 'pink', 'orange', 'green', 'teal'].includes(v)) cfg.accent = v;
+        else break;
+        done.push(`Accent: ${v}`);
+        break;
+      }
+      case 'add_widget': {
+        const type = text.toLowerCase();
+        const ALLOWED = ['clock', 'weather', 'calendar', 'todo', 'note', 'countdown', 'quote', 'stocks', 'music', 'photo', 'sticker', 'memories', 'assistant', 'year', 'system'];
+        if (!ALLOWED.includes(type)) break;
+        if (type !== 'note' && cfg.widgets.some((w) => w.type === type)) {
+          done.push(`${type} is already on your wallpaper`);
+          break;
+        }
+        const [x, y] = spot(cfg);
+        cfg.widgets.push(make(type, x, y));
+        done.push(`Added the ${type} widget`);
+        break;
+      }
       case 'set_theme':
         if (byId(text)) {
           cfg.theme = text;

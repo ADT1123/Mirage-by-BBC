@@ -1,6 +1,8 @@
 // Theme backdrops. Most are DOM + CSS (cheap, GPU-composited transforms);
 // "weather" is a canvas sky driven by real conditions and sun position.
 
+import { realSky, drawMoon, whereAmI, moon } from './sky.js';
+
 const rand = (a, b) => a + Math.random() * (b - a);
 
 function starShadows(n, w = 100, h = 60) {
@@ -14,30 +16,8 @@ function starShadows(n, w = 100, h = 60) {
 
 const CLOUD = 'M25 90C5 90 4 62 30 59C29 31 70 22 86 43C96 14 146 15 151 46C176 40 193 66 176 90Z';
 
-// The terminal backdrop scrolls your own recent git history and live state.
-function terminalLog(ctx) {
-  const user = (ctx.info.user || 'you').toLowerCase();
-  const host = ctx.info.brand?.command || 'desk';
-  const lines = [`${user}@${host}:~$ git log --all --oneline -n 12`];
-  const recent = ctx.store.git?.recent || [];
-  for (const c of recent) lines.push(`${c.hash}  ${c.message}   (${c.repo})`);
-  if (!recent.length) lines.push('(no local commits found yet)');
-  const g = ctx.store.git;
-  if (g?.repoCount) lines.push('', `${user}@${host}:~$ ${host} stats`, `repos scanned   ${g.repoCount}`, `commits (1y)    ${g.total ?? Object.values(g.days || {}).reduce((a, b) => a + b, 0)}`);
-  const wx = ctx.store.weather;
-  if (wx?.ok) lines.push('', `${user}@${host}:~$ weather ${wx.city.toLowerCase()}`, `${wx.label.toLowerCase()}  ${wx.temp}°C  humidity ${wx.humidity}%  wind ${wx.wind} km/h`);
-  lines.push('', `${user}@${host}:~$ date`, ctx.now().toString().slice(0, 24), '');
-  const block = lines.join('\n');
-  return Array.from({ length: Math.ceil(90 / lines.length) }, () => block).join('\n');
-}
 
 const SCENES = {
-  aurora: () => `
-    <div class="sc sc-aurora">
-      <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
-      <div class="grain"></div><div class="vignette"></div>
-    </div>`,
-
   midnight: () => `
     <div class="sc sc-midnight">
       <div class="eclipse"><div class="rim"></div></div>
@@ -47,15 +27,6 @@ const SCENES = {
       <i class="shoot" style="--x:22vw;--y:30vh;--t:17s;--d:11s"></i>
       <div class="grain"></div>
     </div>`,
-
-  terminal: (ctx) => {
-    const log = esc(terminalLog(ctx));
-    return `
-    <div class="sc sc-terminal">
-      <pre class="log">${log}\n${log}</pre>
-      <div class="grid"></div><div class="scan"></div><div class="vignette"></div>
-    </div>`;
-  },
 
   cartoon: () => `
     <div class="sc sc-cartoon">
@@ -88,15 +59,6 @@ const SCENES = {
       <div class="vignette"></div>
     </div>`,
 
-  synthwave: () => `
-    <div class="sc sc-synth">
-      <div class="stars" style="box-shadow:${starShadows(140, 100, 55)}"></div>
-      <div class="sun"></div>
-      <svg class="mountains" viewBox="0 0 1600 200" preserveAspectRatio="none"><path d="M0 200L120 110L220 160L360 60L470 150L560 120L700 190L820 90L930 150L1060 70L1180 160L1300 100L1420 170L1520 120L1600 160V200Z"/></svg>
-      <div class="floor"><div class="grid"></div></div>
-      <div class="haze"></div>
-    </div>`,
-
   zen: () => `
     <div class="sc sc-zen">
       <svg class="enso" viewBox="0 0 400 400">
@@ -108,29 +70,6 @@ const SCENES = {
       <div class="grain"></div>
     </div>`,
 
-  bhakti: () => `
-    <div class="sc sc-bhakti">
-      <svg class="mandala" viewBox="-200 -200 400 400">${mandala()}</svg>
-      <div class="toran">${toran()}</div>
-      <div class="petals">${Array.from({ length: 9 }, (_, i) => `<i style="left:${(i * 37 + 11) % 100}vw;animation-delay:-${(i * 2.7).toFixed(1)}s;animation-duration:${16 + (i % 4) * 4}s"></i>`).join('')}</div>
-      <div class="diyas">${Array.from({ length: 5 }, (_, i) => `<div class="diya" style="animation-delay:-${i * 0.37}s"><span class="glow"></span><span class="flame"></span><span class="bowl"></span></div>`).join('')}</div>
-    </div>`,
-
-  pastel: () => `
-    <div class="sc sc-pastel"><i class="pb p1"></i><i class="pb p2"></i><i class="pb p3"></i><i class="pb p4"></i><div class="grain"></div></div>`,
-
-  ocean: () => `
-    <div class="sc sc-ocean">
-      <div class="stars" style="box-shadow:${starShadows(90, 100, 45)}"></div>
-      <div class="moon"></div>
-      <div class="sea"></div>
-      <div class="glint"></div>
-      <svg class="waves" viewBox="0 0 2400 600" preserveAspectRatio="none">
-        <defs>${[1, 2, 3, 4, 5].map((i) => `<linearGradient id="wg${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="ws${i}a"/><stop offset="1" class="ws${i}b"/></linearGradient>`).join('')}</defs>
-        ${[1, 2, 3, 4, 5].map((i) => `<g class="wl l${i}"><path d="${wave(i)}" fill="url(#wg${i})"/></g>`).join('')}
-      </svg>
-    </div>`,
-
   sakura: () => `
     <div class="sc sc-sakura">
       <div class="sun"></div>
@@ -139,30 +78,12 @@ const SCENES = {
       <div class="petals">${Array.from({ length: 16 }, (_, i) => `<i style="left:${(i * 41 + 13) % 100}vw;animation-delay:-${(i * 1.7).toFixed(1)}s;animation-duration:${14 + (i % 5) * 4}s"></i>`).join('')}</div>
     </div>`,
 
-  orbit: () => `
-    <div class="sc sc-orbit">
-      <div class="stars" style="box-shadow:${starShadows(120, 100, 100)}"></div>
-      <div class="system">
-        <div class="sun"></div>
-        ${[1, 2, 3, 4, 5].map((i) => `<div class="ring r${i}"><i class="planet"></i></div>`).join('')}
-      </div>
-    </div>`,
-
-  forest: () => `
-    <div class="sc sc-forest">
-      <div class="stars" style="box-shadow:${starShadows(70, 100, 40)}"></div>
-      <div class="moon"></div>
-      ${[1, 2, 3].map((i) => `<svg class="range r${i}" viewBox="0 0 1600 400" preserveAspectRatio="none"><path d="${mountains(i)}"/></svg>`).join('')}
-      <div class="mist m1"></div>
-      <svg class="trees" viewBox="0 0 1600 300" preserveAspectRatio="none">${treeline()}</svg>
-      <div class="mist m2"></div>
-      <div class="flies">${Array.from({ length: 22 }, (_, i) => `<i style="left:${(i * 37 + 5) % 100}vw;top:${58 + ((i * 23) % 36)}vh;animation-delay:-${(i * 1.3).toFixed(1)}s;animation-duration:${6 + (i % 4) * 2}s"></i>`).join('')}</div>
-    </div>`,
-
   astro: () => `
     <div class="sc sc-astro">
       <div class="stars" style="box-shadow:${starShadows(160, 100, 70)}"></div>
-      <div class="planet"><div class="surface"></div><div class="shade"></div></div>
+      <canvas class="realsky"></canvas>
+      <div class="planet"><div class="surface"></div><div class="shade"></div><div class="phase"></div></div>
+      <div class="astro-cap"></div>
     </div>`,
 
   retro: () => `
@@ -203,49 +124,8 @@ function toran() {
   }).join('');
 }
 
-// Two periods of a smooth wave across a 2400-wide tile, so sliding half-way loops seamlessly.
-function wave(i) {
-  const amp = 8 + i * 5;
-  const base = 120 + i * 85;
-  const step = 400 - i * 30;
-  let d = `M0 ${base}`;
-  for (let x = 0, k = 0; x < 2400; x += step, k++) d += ` Q${x + step / 2} ${k % 2 ? base + amp : base - amp} ${Math.min(2400, x + step)} ${base}`;
-  return `${d} V600 H0Z`;
-}
 
-// Smooth mountain ranges, nearer ranges taller and bolder.
-function mountains(i) {
-  const base = 200 + i * 55;
-  let d = `M0 400 L0 ${base}`;
-  let k = i * 13;
-  for (let x = 0; x <= 1600; x += 80) {
-    k = (k * 29 + 7) % 89;
-    const peak = base - 40 - (k % 9) * (14 - i * 2) - Math.sin(x / (220 + i * 60)) * (40 - i * 6);
-    d += ` Q${x + 40} ${peak} ${x + 80} ${base - 30 - (k % 5) * 8}`;
-  }
-  return `${d} L1600 400Z`;
-}
 
-// A treeline of proper tiered pines (three tiers each) on a soft hill.
-function treeline() {
-  let out = '<path class="hill" d="M0 300 L0 230 Q400 200 800 225 T1600 215 L1600 300Z"/>';
-  let k = 5;
-  for (let x = -20; x < 1620; ) {
-    k = (k * 37 + 11) % 97;
-    const h = 70 + (k % 9) * 11;
-    const w = h * 0.42;
-    const y = 232 - Math.sin(x / 260) * 8;
-    let tree = '';
-    for (let t = 0; t < 3; t++) {
-      const top = y - h + t * h * 0.24;
-      const bw = w * (0.55 + t * 0.25);
-      tree += `M${x} ${top} L${x + bw / 2} ${top + h * 0.42} L${x - bw / 2} ${top + h * 0.42}Z`;
-    }
-    out += `<path class="pine" d="${tree}"/>`;
-    x += w * 0.55 + (k % 4) * 6;
-  }
-  return out;
-}
 
 // A blossom branch from the top-right corner.
 function branch() {
@@ -283,21 +163,67 @@ export function mountScene(el, theme, ctx) {
       const surf = el.querySelector('.surface');
       if (surf) surf.style.backgroundImage = `url("${textures[kind]}")`;
     }, 300));
-  }
-  if (theme === 'terminal') {
-    let key = '';
+    // the real sky behind it, and (for the Moon) tonight's real phase; redrawn every minute
+    let c = ctx;
+    const paintSky = () => {
+      paintRealSky(el.querySelector('.realsky'), c, 0.98);
+      const cap = el.querySelector('.astro-cap');
+      const shade = el.querySelector('.phase');
+      if (kind !== 'moon') {
+        cap.textContent = '';
+        shade.style.background = '';
+        return;
+      }
+      const m = moon(new Date());
+      const dark = Math.round((1 - m.illum) * 100);
+      // waxing: lit on the right, so the shadow comes from the left (and the other way round)
+      shade.style.background = `linear-gradient(to ${m.waxing ? 'right' : 'left'}, rgba(0,0,0,0.88) ${Math.max(0, dark - 9)}%, transparent ${Math.min(100, dark + 9)}%)`;
+      cap.textContent = `${m.name} · ${Math.round(m.illum * 100)}% lit`;
+    };
+    setTimeout(paintSky, 350);
+    const timer = setInterval(paintSky, 60 * 1000);
     return {
-      update(c) {
-        const k = `${c.store.git?.updated}|${c.store.weather?.updated}`;
-        if (k === key) return;
-        key = k;
-        const log = esc(terminalLog(c));
-        el.querySelector('.log').innerHTML = `${log}\n${log}`;
+      update(next) {
+        c = next;
       },
-      destroy() {},
+      destroy() {
+        clearInterval(timer);
+      },
     };
   }
   return { update() {}, destroy() {} };
+}
+
+// the Astronomy theme's star map: real stars, constellation lines, the brightest named
+function paintRealSky(canvas, ctx, horizon) {
+  if (!canvas) return;
+  const where = whereAmI(ctx);
+  const W = (canvas.width = canvas.clientWidth);
+  const H = (canvas.height = canvas.clientHeight);
+  const g = canvas.getContext('2d');
+  g.clearRect(0, 0, W, H);
+  if (!where) return;
+  const sky = realSky(new Date(), where.lat, where.lon, W, H, horizon);
+  g.strokeStyle = 'rgba(190,205,255,0.16)';
+  g.lineWidth = 1;
+  for (const [a, b] of sky.lines) {
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.stroke();
+  }
+  g.font = `500 ${Math.round(H / 95)}px Inter Variable, sans-serif`;
+  for (const s of sky.stars) {
+    const r = Math.max(0.9, 2.6 - s.mag * 0.6);
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    g.beginPath();
+    g.arc(s.x, s.y, r, 0, Math.PI * 2);
+    g.fill();
+    if (s.mag < 1.2) {
+      g.fillStyle = 'rgba(220,228,255,0.38)';
+      g.fillText(s.name, s.x + r + 5, s.y + 4);
+    }
+  }
 }
 
 // ------------------------------------------------------------------ live sky
@@ -368,6 +294,8 @@ function mountSky(canvas, ctx0) {
   let sprites = {};
   let flash = 0;
   let nextBolt = performance.now() + 4000;
+  let real = null; // the real sky for this place and minute
+  let realAt = 0;
 
   function state() {
     const now = ctx.now();
@@ -430,9 +358,33 @@ function mountSky(canvas, ctx0) {
     const nightness = isDay ? 0 : Math.min(1, fromEdge / 60);
     if (nightness > 0) {
       for (const st of stars) {
-        const a = (0.35 + 0.65 * Math.abs(Math.sin(st.p + t / 1600))) * nightness * (1 - cover);
+        const a = (0.2 + 0.4 * Math.abs(Math.sin(st.p + t / 1600))) * nightness * (1 - cover);
         g.fillStyle = `rgba(255,255,255,${a})`;
         g.fillRect(st.x, st.y, st.r, st.r);
+      }
+      // the real bright stars and constellations over your city, refreshed each minute
+      const where = whereAmI(ctx);
+      if (where && (!real || t - realAt > 60000 || real.W !== W)) {
+        real = { ...realSky(new Date(), where.lat, where.lon, W, H, 0.78), W };
+        realAt = t;
+      }
+      if (real) {
+        const k = nightness * (1 - cover);
+        g.strokeStyle = `rgba(200,215,255,${0.13 * k})`;
+        g.lineWidth = 1;
+        for (const [a, b] of real.lines) {
+          g.beginPath();
+          g.moveTo(a.x, a.y);
+          g.lineTo(b.x, b.y);
+          g.stroke();
+        }
+        for (const st of real.stars) {
+          const r = Math.max(0.9, 2.4 - st.mag * 0.55);
+          g.fillStyle = `rgba(255,255,255,${(0.75 + 0.25 * Math.sin(t / 900 + st.x)) * k})`;
+          g.beginPath();
+          g.arc(st.x, st.y, r, 0, Math.PI * 2);
+          g.fill();
+        }
       }
     }
 
@@ -454,21 +406,18 @@ function mountSky(canvas, ctx0) {
       g.beginPath();
       g.arc(bx, by, H * 0.035, 0, Math.PI * 2);
       g.fill();
-    } else {
-      const glow = g.createRadialGradient(bx, by, 0, bx, by, H * 0.25);
-      glow.addColorStop(0, `rgba(200,215,255,${0.25 * vis})`);
+    } else if (real?.moon?.onScreen || !real) {
+      // the real Moon: where it actually is tonight, lit the way it actually is
+      const mx = real ? real.moon.x : bx;
+      const my = real ? real.moon.y : by;
+      const glow = g.createRadialGradient(mx, my, 0, mx, my, H * 0.25);
+      glow.addColorStop(0, `rgba(200,215,255,${0.25 * vis * (real ? 0.3 + real.moon.illum * 0.7 : 1)})`);
       glow.addColorStop(1, 'rgba(200,215,255,0)');
       g.fillStyle = glow;
       g.fillRect(0, 0, W, H);
-      const r = H * 0.028;
-      g.fillStyle = `rgba(236,240,255,${0.95 * vis})`;
-      g.beginPath();
-      g.arc(bx, by, r, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = rgb(mix(top, mid, 0.5), 0.9 * vis);
-      g.beginPath();
-      g.arc(bx + r * 0.42, by - r * 0.25, r * 0.86, 0, Math.PI * 2);
-      g.fill();
+      g.globalAlpha = 0.95 * vis;
+      drawMoon(g, mx, my, H * 0.028, real ? real.moon : moon(new Date()), rgb(mix(top, mid, 0.5), 0.9));
+      g.globalAlpha = 1;
     }
 
     // far mountains

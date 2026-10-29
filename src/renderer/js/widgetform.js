@@ -1,7 +1,7 @@
 // "Edit Widget": one form for any widget, used by the live wallpaper popup and the editor.
 // It edits a widget object in place and calls onChange() after every change.
 
-import { esc, SHAPES } from './widgets.js';
+import { esc, SHAPES, fileUrl } from './widgets.js';
 import { icon } from './icons.js';
 
 export const STYLES = [
@@ -48,7 +48,7 @@ export const FONTS = {
   pixel: { label: 'Pixel', family: "'Pixelify Sans', monospace" },
   comic: { label: 'Comic', family: "'Bangers', cursive" },
 };
-const NO_FONT = new Set(['menubar', 'dock', 'stack', 'music', 'commits', 'art']);
+const NO_FONT = new Set(['menubar', 'dock', 'stack', 'music', 'commits', 'art', 'photo', 'memories']);
 
 const OPTIONS = {
   clock: [
@@ -71,6 +71,9 @@ const OPTIONS = {
   ],
   verse: [['rotate', 'New verse', 'seg', ROTATE, 'day']],
   stocks: [['symbols', 'Watchlist', 'list', '^NSEI, RELIANCE.NS, AAPL, BTC-USD']],
+  photo: [['every', 'Change photo', 'seg', [[0, 'Never'], [1, '1 min'], [60, 'Hourly'], [1440, 'Daily']], 0]],
+  sticker: [['plain', 'No background', 'toggle', false]],
+  memories: [['every', 'Change photo', 'seg', [[1, '1 min'], [15, '15 min'], [60, 'Hourly']], 15]],
   stack: [['interval', 'Rotate', 'seg', [[0, 'Off'], [6, '6s'], [12, '12s'], [30, '30s']]]],
 };
 
@@ -91,6 +94,11 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
   const seg = (key, choices, def) =>
     `<div class="wg-seg">${choices.map(([v, label]) => `<button data-k="${key}" data-v="${esc(String(v))}" class="${String(opt(key, def)) === String(v) ? 'on' : ''}">${esc(label)}</button>`).join('')}</div>`;
   const sw = (key, def) => `<button class="wg-switch${opt(key, def) ? ' on' : ''}" data-flip="${key}" role="switch" aria-checked="${!!opt(key, def)}"><i></i></button>`;
+  // the last swatch: any color at all
+  const custom = (key) => {
+    const v = /^#[0-9a-f]{6}$/i.test(w[key] || '') ? w[key] : '';
+    return `<label class="wg-anycolor${v ? ' on' : ''}" title="Any color" style="${v ? `--c:${v}` : ''}"><input type="color" data-anycolor="${key}" value="${v || '#ff6b6b'}" />${v ? icon('check') : icon('plus')}</label>`;
+  };
   const row = (label, control, cls = '') => `<div class="wg-row ${cls}"><span>${label}</span>${control}</div>`;
 
   const fields = (OPTIONS[w.type] || [])
@@ -120,7 +128,7 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
            .join('')}</div>`
       : '';
 
-  const tabs = [['look', 'Look'], ...(hasFont ? [['font', 'Font']] : []), ...(fields || stackItems ? [['options', w.type === 'stack' ? 'Stack' : 'Options']] : [])];
+  const tabs = [['look', 'Look'], ...(hasFont ? [['font', 'Font']] : []), ...(fields || stackItems || w.type === 'photo' || w.type === 'sticker' ? [['options', w.type === 'stack' ? 'Stack' : w.type === 'photo' ? 'Photos' : 'Options']] : [])];
   if (lastTab.id !== w.id) lastTab = { id: w.id, tab: 'look' };
   if (!tabs.some(([k]) => k === lastTab.tab)) lastTab.tab = 'look';
   const tab = lastTab.tab;
@@ -144,14 +152,14 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
              tinted
                ? `<div class="wg-label">Color</div><div class="wg-swatches">${Object.entries(TINTS)
                    .map(([k, c]) => `<button data-tint="${k}" class="${opt('tint', 'graphite') === k ? 'on' : ''}" style="--c:${c}" title="${k}">${icon('check')}</button>`)
-                   .join('')}</div>`
+                   .join('')}${custom('tint')}</div>`
                : ''
            }
            <div class="wg-label">Highlight color</div><div class="wg-hint">Colors the greeting, bars and charts. Auto uses the theme color.</div>
            <div class="wg-swatches"><button data-accent="" class="auto${!w.accent ? ' on' : ''}" title="Theme accent">Auto</button>${Object.entries(TINTS)
              .filter(([k]) => k !== 'graphite' && k !== 'white')
              .map(([k, c]) => `<button data-accent="${k}" class="${w.accent === k ? 'on' : ''}" style="--c:${c}" title="${k}">${icon('check')}</button>`)
-             .join('')}</div>`
+             .join('')}${custom('accent')}</div>`
         : ''
     }
     ${
@@ -159,7 +167,7 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
         ? `<div class="wg-label">Text color</div>
            <div class="wg-swatches"><button data-textc="" class="auto${!w.textColor ? ' on' : ''}" title="Theme text">Auto</button>${Object.entries(TINTS)
              .map(([k, c]) => `<button data-textc="${k}" class="${w.textColor === k ? 'on' : ''}" style="--c:${c}" title="${k}">${icon('check')}</button>`)
-             .join('')}</div>`
+             .join('')}${custom('textColor')}</div>`
         : ''
     }
     <div class="wg-label">Scale</div>
@@ -197,7 +205,23 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
       }`;
   };
 
-  const options = () => `${fields ? `<div class="wg-card">${fields}</div>` : ''}${stackItems}`;
+  // your photos: thumbnails, remove, add more
+  const photos =
+    w.type === 'photo'
+      ? `<div class="wg-label">Photos</div>
+         <div class="wg-photos">${(w.photos || [])
+           .map((p, i) => `<span style="background-image:url('${fileUrl(p).replace(/'/g, '%27')}')"><button data-unphoto="${i}" title="Remove">${icon('x')}</button></span>`)
+           .join('')}<button class="wg-addphoto" data-addphoto>${icon('plus')}<small>Add</small></button></div>`
+      : '';
+  // emoji / words: type anything (Win + . opens the emoji panel), or tap one
+  const EMOJI = ['✨', '🌙', '☀️', '🔥', '💜', '🖤', '🌸', '🍀', '🎧', '☕', '🚀', '💻', '📚', '🏋️', '🧘', '🎯', '🙏', '🕉️', '😎', '🥳', '🌊', '⛰️', '🐈', '🦋'];
+  const sticker =
+    w.type === 'sticker'
+      ? `<div class="wg-label">Emoji or words</div>
+         <input class="wg-input wg-emoji" data-text="text" value="${esc(w.text || '')}" maxlength="24" placeholder="Type or press Win + ." />
+         <div class="wg-emojis">${EMOJI.map((e) => `<button data-emoji="${e}">${e}</button>`).join('')}</div>`
+      : '';
+  const options = () => `${photos}${sticker}${fields ? `<div class="wg-card">${fields}</div>` : ''}${stackItems}`;
 
   root.innerHTML = `
     <div class="wg">
@@ -211,6 +235,15 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
 
   // text lists (e.g. the stock watchlist) save when you leave the field or press Enter
   root.onchange = (e) => {
+    if (e.target.dataset.anycolor) {
+      w[e.target.dataset.anycolor] = e.target.value;
+      onChange();
+      return rerender();
+    }
+    if (e.target.dataset.text) {
+      w[e.target.dataset.text] = e.target.value.trim();
+      return onChange();
+    }
     const key = e.target.dataset.list;
     if (!key) return;
     w[key] = e.target.value.split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, 8);
@@ -234,6 +267,18 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
   root.onclick = (e) => {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
+    if (b.dataset.addphoto !== undefined) {
+      window.wall.pickImages?.().then((files) => {
+        if (!files?.length) return;
+        w.photos = [...(w.photos || []), ...files].slice(0, 50);
+        onChange();
+        rerender();
+        onResize?.();
+      });
+      return;
+    }
+    if (b.dataset.unphoto) w.photos.splice(Number(b.dataset.unphoto), 1);
+    if (b.dataset.emoji) w.text = b.dataset.emoji;
     if (b.dataset.tab) {
       lastTab.tab = b.dataset.tab;
       rerender();
