@@ -380,13 +380,14 @@ export function frameState(body, v, ctx, time, size, mouse) {
   return { u, caption };
 }
 
-// the patch of the 8k Earth maps worth loading for a framing (degrees), and its size
+// The patch of the 8k Earth maps around you (degrees) and its size. One patch serves both the
+// globe and the close-up, so zooming between them never stops to load anything.
 export function regionFor(home, close, tier) {
   if (tier === 'low' || tier === 'still') return null;
-  const span = close ? 100 : 180;
+  const span = tier === 'high' ? 180 : 130;
   const lat1 = Math.min(90, home.lat + span / 2);
   const lat0 = Math.max(-90, home.lat - span / 2);
-  const n = tier === 'high' && !close ? 4096 : 2048;
+  const n = tier === 'high' ? 4096 : 2048;
   return { lon0: home.lon - span / 2, span, lat1, spanLat: lat1 - lat0, n };
 }
 

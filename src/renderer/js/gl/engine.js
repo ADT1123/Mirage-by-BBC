@@ -273,13 +273,15 @@ async function loadBody(R, body, tier, alive = () => true) {
 }
 
 // the sharp 8k patch around your location (Earth); resolves to the uRegion uniform
-async function loadRegion(R, home, close, tier, alive, onSwap) {
+async function loadRegion(R, home, close, tier, alive, onSwap, calm = () => true) {
   const box = regionFor(home, close, tier);
   if (!box || R.maxTex < box.n) return null;
   // one at a time: each 8k map is ~130 MB while it's being decoded
   const maps = [];
   for (const [i, m] of ['earth_daymap', 'earth_nightmap', 'earth_clouds'].entries()) maps.push(await patch(m, box, i === 2 && box.n > 2048 ? 2048 : box.n));
   if (!alive() || maps.some((m) => !m)) return null;
+  // big uploads stall a frame or two: wait until the camera isn't moving
+  while (alive() && !calm()) await new Promise((r) => setTimeout(r, 120));
   onSwap?.();
   for (const [i, key] of ['dayR', 'nitR', 'cldR'].entries()) {
     if (!alive()) return null;
@@ -317,7 +319,8 @@ export function mountWall(host, wall, ctx0) {
   const target = () => sized(body, view(viewName));
   let cam = astro ? target() : null;
   let move = null; // { from, to, start, dur }
-  const fly = (from, to, dur) => (move = { from, to, start: performance.now(), dur });
+  // fresh: draw the first frame of a move right away, not at the next idle tick
+  const fly = (from, to, dur) => (move = { from, to, start: performance.now(), dur, fresh: true });
   if (astro && ctx.cfg.motion !== false) fly(pulledBack(target()), target(), 1800);
 
   const loadAll = () => {
@@ -332,10 +335,10 @@ export function mountWall(host, wall, ctx0) {
   const refreshRegion = () => {
     const home = homeFor(ctx);
     const close = viewName === 'city';
-    const key = `${tier}|${close}|${home.lat.toFixed(1)},${home.lon.toFixed(1)}`;
+    const key = `${tier}|${home.lat.toFixed(1)},${home.lon.toFixed(1)}`;
     if (key === regionKey) return;
     regionKey = key;
-    loadRegion(R, home, close, tier, () => alive && regionKey === key, () => (region = null)).then((r) => {
+    loadRegion(R, home, close, tier, () => alive && regionKey === key, () => (region = null), () => !move).then((r) => {
       if (regionKey === key) region = r;
     });
   };
@@ -377,7 +380,6 @@ export function mountWall(host, wall, ctx0) {
       const views = viewsFor(body);
       viewName = views[(views.indexOf(viewName) + 1) % views.length];
       fly(cam, target(), 2200);
-      if (BODIES[body].shader === 'earth') refreshRegion();
     }
   };
   window.addEventListener('mousemove', onMove);
@@ -417,7 +419,8 @@ export function mountWall(host, wall, ctx0) {
       acc = 0;
       frames = 0;
     }
-    if (last && t - last < 1000 / fps - 3 && !easing) return;
+    if (last && t - last < 1000 / fps - 3 && !easing && !move?.fresh) return;
+    if (move) move.fresh = false;
     const dt = last ? Math.min(0.25, (t - last) / 1000) : 0;
     last = t;
     if (motion) time += dt;
@@ -462,7 +465,8 @@ export function mountWall(host, wall, ctx0) {
       if (g != null) gpuMs = gpuMs == null ? g : gpuMs * 0.7 + g * 0.3;
       acc += dt;
       frames++;
-      if (acc > 1.2) {
+      // never resize the canvas mid-move (that drops frames); adjust once things are still
+      if (acc > 1.2 && !move && !settling) {
         const top = 1 / ((SHARE[name] ?? 0.6) * T.res);
         const floor = FLOOR[name] || 0.4;
         const was = scale;
