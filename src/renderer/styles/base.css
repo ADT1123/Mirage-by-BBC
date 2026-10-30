@@ -76,6 +76,8 @@ body {
 #backdrop::after { content: ''; position: absolute; inset: 0; background: rgba(0, 0, 0, var(--dim, 0.25)); }
 [data-bg='image'] #backdrop { display: block; }
 [data-bg='image'] #scene { display: none; }
+/* wallpaper blur (Control Center), for every pack and for photos */
+[data-blur] #scene, [data-blur] #backdrop { filter: blur(var(--wall-blur)); transform: scale(var(--wall-grow)); }
 
 .sc { position: absolute; inset: 0; overflow: hidden; }
 

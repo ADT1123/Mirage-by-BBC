@@ -15,7 +15,7 @@
 .editing #scene { animation: ed-dim 0.45s ease forwards; }
 .editing.leaving #stage, .editing.leaving #chrome { opacity: 0; transition: opacity 0.18s; }
 @keyframes ed-in { from { transform: scale(0.985); opacity: 0.4; } }
-@keyframes ed-dim { to { filter: brightness(0.82) saturate(0.95); } }
+@keyframes ed-dim { to { filter: blur(var(--wall-blur, 0px)) brightness(0.82) saturate(0.95); } }
 
 /* ------------------------------------------------------------ widgets in edit mode */
 

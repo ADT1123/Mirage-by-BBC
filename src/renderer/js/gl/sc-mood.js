@@ -85,4 +85,4 @@ void main(){
 export const SCENES = { lava: LAVA };
 
 // fps cap and share of device pixels rendered (the engine adapts it to the GPU)
-export const META = { lava: { fps: 30, res: 0.6 } };
+export const META = { lava: { fps: 24, res: 0.6 } };

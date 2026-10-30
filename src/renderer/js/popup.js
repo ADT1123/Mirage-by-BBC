@@ -286,6 +286,8 @@ function control(root) {
         <label class="slider" data-k="bright-wrap" title="Brightness">${icon('sun2')}<input type="range" min="0" max="100" data-set="brightness" /></label>
         <div class="cc-sl-title"><span>Sound</span><button class="cc-out" data-pop="sound" title="Sound output"><span data-k="out">Output</span>${icon('chevron', 'cc-go')}</button></div>
         ${volumeRow()}
+        <div class="cc-sl-title"><span>Wallpaper blur</span><small data-k="blur-v"></small></div>
+        <label class="slider" title="Blur the wallpaper">${icon('blur')}<input type="range" min="0" max="100" data-blur /></label>
       </div>
       <div class="cc-np" data-k="np">
         <button class="np-art-sm" data-run="player" title="Open Now Playing"></button>
@@ -314,6 +316,20 @@ function control(root) {
     paintVolume(root, s);
   });
   on('motion', cfg.motion !== false);
+  // wallpaper blur applies while you drag (saved a moment after the slider stops)
+  const blur = $('[data-blur]');
+  const blurLabel = () => ($('[data-k="blur-v"]').textContent = Number(blur.value) ? `${blur.value}%` : 'Off');
+  blur.value = cfg.wallBlur ?? 0;
+  blurLabel();
+  fillSliders(root);
+  let blurT = null;
+  blur.addEventListener('input', () => {
+    cfg.wallBlur = Number(blur.value);
+    blurLabel();
+    fillSliders(root);
+    clearTimeout(blurT);
+    blurT = setTimeout(save, 40);
+  });
   window.wall.ccList('audio').then((list) => {
     const d = list?.find((x) => x.default);
     if (d) $('[data-k="out"]').textContent = shortName(d.name);

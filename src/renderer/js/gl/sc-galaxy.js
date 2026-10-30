@@ -5,7 +5,7 @@
 // neighbouring noise cells different values (visible seams). This scene uses an exact-integer
 // permutation hash instead: every intermediate stays a whole number below 2^24, so any re-ordering
 // gives the same answer.
-const PRE = `
+export const PRE = `
 float pm(float x){ return mod((34.0*x + 1.0)*x, 289.0); }
 float H(vec2 c){ c = mod(floor(c), 289.0); return pm(pm(c.x) + c.y)/289.0; }
 float H(vec2 c, float k){ c = mod(floor(c), 289.0); return pm(pm(pm(c.x) + c.y) + k)/289.0; }
@@ -108,4 +108,4 @@ void main(){
 `;
 
 export const SCENES = { galaxy: GALAXY };
-export const META = { galaxy: { fps: 30, res: 0.7 } };
+export const META = { galaxy: { fps: 20, res: 0.7 } };

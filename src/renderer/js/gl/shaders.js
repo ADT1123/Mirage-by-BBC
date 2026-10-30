@@ -19,6 +19,9 @@ float fbm(vec2 p){ float v = 0.0; float a = 0.5; mat2 m = mat2(1.6, 1.2, -1.2, 1
 float fbm3(vec2 p){ float v = 0.0; float a = 0.5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6); for(int i = 0; i < 3; i++){ v += a*noise(p); p = m*p; a *= 0.5; } return v; }
 mat2 rot(float a){ float c = cos(a); float s = sin(a); return mat2(c, -s, s, c); }
 float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b - a)/k, 0.0, 1.0); return mix(b, a, h) - k*h*(1.0 - h); }
+// where a ray is inside a sphere of radius r around the origin: (enter, leave), leave < 0 if it
+// misses. Ray-marched scenes only march inside it, so the empty background costs almost nothing.
+vec2 bound(vec3 ro, vec3 rd, float r){ float b = dot(ro, rd); float h = b*b - dot(ro, ro) + r*r; if(h < 0.0) return vec2(-1.0); h = sqrt(h); return vec2(max(-b - h, 0.0), -b + h); }
 vec3 aces(vec3 x){ return clamp((x*(2.51*x + 0.03))/(x*(2.43*x + 0.59) + 0.14), 0.0, 1.0); }
 vec3 finish(vec3 col, vec2 fc){
   col = aces(max(col, 0.0));
@@ -107,8 +110,9 @@ void main(){
   vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
   vec3 vv = cross(uu, ww);
   vec3 rd = normalize(uv.x*uu + uv.y*vv + 1.8*ww);
-  float t = 0.0; bool hit = false;
-  for(int i = 0; i < 90; i++){ float d = map(ro + rd*t); if(d < 0.001){ hit = true; break; } t += d; if(t > 12.0) break; }
+  vec2 bb = bound(ro, rd, 2.5);
+  float t = bb.x; bool hit = false;
+  if(bb.y > 0.0) for(int i = 0; i < 90; i++){ float d = map(ro + rd*t); if(d < 0.001){ hit = true; break; } t += d; if(t > bb.y) break; }
   vec3 col = env(rd)*0.9;
   if(hit){
     vec3 p = ro + rd*t; vec3 n = nrm(p);
@@ -146,8 +150,10 @@ float blob(vec3 p){
 vec3 nrm(vec3 p){ vec2 e = vec2(0.0015, -0.0015);
   return normalize(e.xyy*blob(p + e.xyy) + e.yyx*blob(p + e.yyx) + e.yxy*blob(p + e.yxy) + e.xxx*blob(p + e.xxx)); }
 float trace(vec3 ro, vec3 rd){
-  float t = 0.0;
-  for(int i = 0; i < 80; i++){ float d = blob(ro + rd*t); if(d < 0.001) return t; t += d*0.8; if(t > 14.0) break; }
+  vec2 bb = bound(ro, rd, 2.4);
+  if(bb.y < 0.0) return -1.0;
+  float t = bb.x;
+  for(int i = 0; i < 80; i++){ float d = blob(ro + rd*t); if(d < 0.001) return t; t += d*0.8; if(t > bb.y) break; }
   return -1.0;
 }
 vec3 env(vec3 rd){
@@ -197,18 +203,24 @@ void main(){
 }
 `;
 
+// Dunes: flying low over a sea of sand. Rays that point above the highest crest skip the march
+// (that's the whole sky), and the fine wind ripples are shading only, so it reaches full
+// resolution on ordinary laptops.
 const DUNES = `
 vec3 gSun; vec3 gZen; vec3 gSd;
 float dprof(float s){ s = fract(s); return smoothstep(0.0, 0.82, s)*(1.0 - smoothstep(0.82, 1.0, s)); }
-float terr(vec2 p){
+// two octaves are enough for shapes this big (the old three-octave version cost half again)
+float n2(vec2 p){ return 0.667*noise(p) + 0.333*noise(p*2.03 + 7.1); }
+const float TOP = 3.2; // no dune is higher than this
+// t: how far away it's seen from. Past 20 units (in the haze) one octave of noise is enough.
+float terr(vec2 p, float t){
   vec2 q = p*0.11;
-  float w = fbm3(q*0.7)*2.2;
+  bool far = t > 20.0;
+  float w = (far ? noise(q*0.7) : n2(q*0.7))*1.9;
   float h = dprof(q.x*0.9 + q.y*0.45 + w)*1.3;
   h += dprof(q.x*0.5 - q.y*0.8 + w*0.6 + 0.3)*0.6;
-  h += fbm3(q*0.5 + 3.0)*1.4;
-  return h;
+  return h + (far ? noise(q*0.5 + 3.0) : n2(q*0.5 + 3.0))*1.2;
 }
-float terrD(vec2 p){ return terr(p) + 0.012*sin(p.x*6.0 + p.y*2.0 + fbm3(p*0.8)*6.0); }
 vec3 sky(vec3 rd){
   float y = max(rd.y, 0.0);
   vec3 c = mix(gSun*1.1 + 0.06*(1.0 - uNight*0.7), gZen, pow(y, 0.45));
@@ -228,27 +240,50 @@ void main(){
   vec3 sand = mix(uA, vec3(0.5, 0.55, 0.72), uNight);
   float T = uTime*0.25;
   vec3 ro = vec3(T, 0.0, T*0.4);
-  ro.y = max(terr(ro.xz), terr(ro.xz + vec2(1.0, 2.0))) + 1.3;
+  ro.y = max(terr(ro.xz, 0.0), terr(ro.xz + vec2(1.0, 2.0), 0.0)) + 1.3;
   vec3 fw = normalize(vec3(0.15 + uMouse.x*0.15, -0.13 + uMouse.y*0.06, 1.0));
   vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), fw));
   vec3 vv = cross(fw, uu);
   vec3 rd = normalize(uv.x*uu + uv.y*vv + 1.5*fw);
+  // past the highest crest a rising ray can't hit anything
+  float tmax = rd.y > 0.0 ? min(130.0, (TOP - ro.y)/rd.y) : 130.0;
   float t = 0.1; bool hit = false;
   float tp = t;
-  for(int i = 0; i < 96; i++){ vec3 p = ro + rd*t; float h = p.y - terr(p.xz); if(h < 0.002*t){ hit = true; break; } tp = t; t += h*0.6; if(t > 130.0) break; }
+  for(int i = 0; i < 90; i++){
+    vec3 p = ro + rd*t; float h = p.y - terr(p.xz, t);
+    if(h < 0.002*t){ hit = true; break; }
+    tp = t; t += h*0.7;
+    if(t > tmax) break;
+  }
   // the big steps can overshoot a crest; bisect back to the surface so ridges stay clean
-  if(hit){ for(int i = 0; i < 5; i++){ float tm = 0.5*(tp + t); vec3 pm = ro + rd*tm; if(pm.y - terr(pm.xz) < 0.0) t = tm; else tp = tm; } }
+  if(hit){ for(int i = 0; i < 5; i++){ float tm = 0.5*(tp + t); vec3 pm = ro + rd*tm; if(pm.y - terr(pm.xz, tm) < 0.0) t = tm; else tp = tm; } }
   vec3 col = sky(rd);
   if(hit){
     vec3 p = ro + rd*t;
-    vec2 e = vec2(0.02, 0.0);
-    vec3 n = normalize(vec3(terrD(p.xz - e.xy) - terrD(p.xz + e.xy), 2.0*e.x, terrD(p.xz - e.yx) - terrD(p.xz + e.yx)));
-    float sh = 1.0; float st = 0.2;
-    for(int i = 0; i < 16; i++){ vec3 sp = p + gSd*st; float hh = sp.y - terr(sp.xz); sh = min(sh, 8.0*hh/st); st += clamp(hh, 0.25, 2.0); if(sh < 0.0 || st > 30.0) break; }
+    float e = 0.02 + t*0.002;
+    float h0 = terr(p.xz, t);
+    vec3 n = normalize(vec3(h0 - terr(p.xz + vec2(e, 0.0), t), e, h0 - terr(p.xz + vec2(0.0, e), t)));
+    // wind ripples: fine sharp-backed ridges across the sand, bending with the dunes; they fade
+    // out with distance before they could shimmer
+    float rk = smoothstep(28.0, 3.0, t);
+    if(rk > 0.0){
+      vec2 rdir = normalize(vec2(1.0, 0.45));
+      float ph = dot(p.xz, rdir)*9.0 + noise(p.xz*0.6)*5.0;
+      float sl = cos(ph) + 0.45*cos(2.0*ph);
+      n = normalize(n + vec3(rdir.x, 0.0, rdir.y)*sl*0.09*rk);
+    }
+    float sh = 1.0; float st = 0.3;
+    for(int i = 0; i < 9; i++){ vec3 sp = p + gSd*st; float hh = sp.y - terr(sp.xz, t + st); sh = min(sh, 8.0*hh/st); st += clamp(hh, 0.4, 3.0); if(sh < 0.0 || st > 30.0 || sp.y > TOP) break; }
     sh = clamp(sh, 0.0, 1.0);
     float dif = max(dot(n, gSd), 0.0);
     float back = max(dot(n, normalize(vec3(-gSd.x, 0.0, -gSd.z))), 0.0);
-    col = sand*(dif*sh*gSun*2.4 + (0.5 + 0.5*n.y)*gZen*0.55 + back*sand*0.12);
+    // light bouncing between the dunes warms the shadowed faces
+    vec3 bounce = sand*sand*gSun*0.35*(1.0 - sh*dif);
+    col = sand*(dif*sh*gSun*2.4 + (0.5 + 0.5*n.y)*gZen*0.55 + back*sand*0.12) + bounce;
+    // a soft sheen along the lit crests, and the odd sparkling grain up close
+    vec3 hv = normalize(gSd - rd);
+    col += gSun*pow(max(dot(n, hv), 0.0), 60.0)*0.05*sh;
+    if(uQ > 0.5) col += gSun*step(0.985, hash(floor(p.xz*90.0)))*pow(max(dot(n, hv), 0.0), 8.0)*sh*rk*0.3;
     col = mix(col, sky(normalize(vec3(rd.x, 0.03, rd.z)))*0.95, 1.0 - exp(-t*0.018));
   }
   gl_FragColor = vec4(finish(col, fc), 1.0);
@@ -257,18 +292,22 @@ void main(){
 
 const AURORA = `
 float curtain(vec2 p){
-  float a = p.x*0.6 + 2.2*fbm3(vec2(p.y*0.18, uTime*0.015)) + 0.4*sin(p.y*0.3 + uTime*0.1);
+  vec2 w = vec2(p.y*0.18, uTime*0.015);
+  float a = p.x*0.6 + 2.2*(0.583*noise(w) + 0.292*noise(w*2.03 + 5.0)) + 0.4*sin(p.y*0.3 + uTime*0.1);
   float band = pow(0.5 + 0.5*sin(a*1.6), 10.0);
   band *= 0.35 + 0.65*fbm3(vec2(p.x*2.5 + p.y*0.4, p.y*0.7 - uTime*0.08));
   return band;
 }
-vec3 aurora(vec3 rd){
+// n layers through the glowing sheet (18 for the sky, a few for its blurred reflection)
+vec3 aurora(vec3 rd, float n){
   vec3 acc = vec3(0.0);
-  for(int i = 0; i < 30; i++){
+  for(int i = 0; i < 18; i++){
     float fi = float(i);
-    float tt = (0.9 + fi*0.035)/(rd.y + 0.04);
+    if(fi >= n) break;
+    float k = fi/n;
+    float tt = (0.9 + k*1.02)/(rd.y + 0.04);
     float c = curtain(rd.xz*tt);
-    acc += mix(uA, uB, smoothstep(8.0, 26.0, fi))*c*exp(-fi*0.09)*0.11;
+    acc += mix(uA, uB, smoothstep(0.27, 0.87, k))*c*exp(-k*2.7)*(3.3/n);
   }
   return acc*smoothstep(0.0, 0.25, rd.y)*mix(0.45, 1.0, uNight);
 }
@@ -279,12 +318,12 @@ float stars(vec3 rd){
   float st = step(0.975, h)*smoothstep(0.25, 0.0, length(f - (vec2(hash(c + 1.3), hash(c + 7.1)) - 0.5)*0.5));
   return st*(0.6 + 0.4*sin(uTime*2.0 + h*50.0))*(0.4 + 0.6*hash(c + 3.3));
 }
-float mtn(float az){ return 0.015 + 0.14*smoothstep(0.3, 0.8, fbm(vec2(az*1.6, 2.0))) + 0.02*fbm(vec2(az*12.0, 5.0)); }
-vec3 skyc(vec3 rd){
+float mtn(float az){ return 0.015 + 0.14*smoothstep(0.3, 0.8, fbm3(vec2(az*1.6, 2.0))*1.14) + 0.02*fbm3(vec2(az*12.0, 5.0)); }
+vec3 skyc(vec3 rd, float n){
   float y = pow(max(rd.y, 0.0), 0.5);
   vec3 c = mix(mix(vec3(0.10, 0.22, 0.34), vec3(0.03, 0.08, 0.18), y), mix(vec3(0.02, 0.05, 0.09), vec3(0.003, 0.006, 0.02), y), uNight);
   c += stars(rd)*vec3(0.9, 0.95, 1.0)*smoothstep(0.02, 0.2, rd.y)*mix(0.25, 1.0, uNight);
-  c += aurora(rd);
+  c += aurora(rd, n);
   return c;
 }
 void main(){
@@ -296,8 +335,8 @@ void main(){
   vec3 rock = mix(vec3(0.02, 0.035, 0.05), vec3(0.006, 0.01, 0.016), uNight);
   vec3 col;
   if(rd.y >= 0.0){
-    if(rd.y < m) col = rock + aurora(normalize(vec3(rd.x, 0.3, rd.z)))*0.05*(1.0 - rd.y/m);
-    else col = skyc(rd);
+    if(rd.y < m) col = rock + mix(uA, uB, 0.4)*0.012*(1.0 - rd.y/m)*mix(0.45, 1.0, uNight);
+    else col = skyc(rd, uQ < 0.5 ? 12.0 : 18.0);
     col += vec3(0.05, 0.14, 0.12)*exp(-rd.y*30.0)*0.35;
   } else {
     vec3 rr = vec3(rd.x, -rd.y, rd.z);
@@ -305,7 +344,7 @@ void main(){
     rr.xz += (vec2(noise(wp*2.0 + uTime*0.3), noise(wp*2.0 - uTime*0.25)) - 0.5)*0.015;
     rr = normalize(rr);
     float m2 = mtn(atan(rr.x, rr.z));
-    vec3 rc = rr.y < m2 ? rock*0.7 : skyc(rr);
+    vec3 rc = rr.y < m2 ? rock*0.7 : skyc(rr, 7.0);
     float fres = 0.25 + 0.75*pow(1.0 + rd.y, 4.0);
     col = rc*fres*0.85 + vec3(0.002, 0.004, 0.006);
   }
@@ -332,7 +371,7 @@ vec2 map(vec3 p){
 }
 vec3 nrm(vec3 p){ vec2 e = vec2(0.0015, -0.0015);
   return normalize(e.xyy*map(p + e.xyy).x + e.yyx*map(p + e.yyx).x + e.yxy*map(p + e.yxy).x + e.xxx*map(p + e.xxx).x); }
-float softsh(vec3 ro, vec3 rd){ float r = 1.0; float t = 0.02; for(int i = 0; i < 40; i++){ float h = map(ro + rd*t).x; r = min(r, 10.0*h/t); t += clamp(h, 0.02, 0.25); if(r < 0.001 || t > 8.0) break; } return clamp(r, 0.0, 1.0); }
+float softsh(vec3 ro, vec3 rd){ float r = 1.0; float t = 0.02; for(int i = 0; i < 26; i++){ float h = map(ro + rd*t).x; r = min(r, 10.0*h/t); t += clamp(h, 0.03, 0.35); if(r < 0.001 || t > 5.0) break; } return clamp(r, 0.0, 1.0); }
 float occ(vec3 p, vec3 n){ float o = 0.0; float s = 1.0; for(int i = 0; i < 5; i++){ float h = 0.02 + 0.12*float(i); o += (h - map(p + n*h).x)*s; s *= 0.75; } return clamp(1.0 - 2.0*o, 0.0, 1.0); }
 void main(){
   vec2 fc = gl_FragCoord.xy;
@@ -415,7 +454,7 @@ void main(){
 `;
 
 const NEON = `
-float terr(vec2 p){ float v = smoothstep(1.2, 7.0, abs(p.x)); return v*(0.6 + 3.2*fbm3(p*0.22)); }
+float terr(vec2 p){ float v = smoothstep(1.2, 7.0, abs(p.x)); if(v <= 0.0) return 0.0; return v*(0.6 + 3.2*fbm3(p*0.22)); }
 void main(){
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - 0.5*uRes)/uRes.y;
@@ -441,7 +480,9 @@ void main(){
   sc += vec3(1.0)*step(0.993, hash(sg))*smoothstep(0.25, 0.5, rd.y)*0.8*uNight;
   vec3 col = sc;
   float t = 0.0; bool hit = false;
-  for(int i = 0; i < 130; i++){ vec3 p = ro + rd*t; float h = p.y - terr(p.xz); if(h < 0.002*t){ hit = true; break; } t += h*0.5; if(t > 90.0) break; }
+  // past the highest hill (3.5) a rising ray can't hit anything: that's the whole sky
+  float tmax = rd.y > 0.0 ? min(90.0, (3.5 - ro.y)/rd.y) : 90.0;
+  for(int i = 0; i < 130; i++){ vec3 p = ro + rd*t; float h = p.y - terr(p.xz); if(h < 0.002*t){ hit = true; break; } t += h*0.55; if(t > tmax) break; }
   if(hit){
     vec3 p = ro + rd*t;
     vec2 gd = abs(fract(p.xz) - 0.5);
@@ -493,4 +534,4 @@ void main(){
 export const SHADERS = { silk: SILK, glass: GLASS, chrome: CHROME, dunes: DUNES, aurora: AURORA, clay: CLAY, dots: DOTS, neon: NEON, gradient: GRADIENT };
 
 // share of device pixels each scene renders at (the engine adapts it to the GPU)
-export const RES = { silk: 0.75, glass: 0.55, chrome: 0.55, dunes: 0.45, aurora: 0.55, clay: 0.65, dots: 0.7, neon: 0.55, gradient: 0.5 };
+export const RES = { silk: 0.8, glass: 0.75, chrome: 0.75, dunes: 0.8, aurora: 0.75, clay: 0.8, dots: 0.8, neon: 0.75, gradient: 0.5 };

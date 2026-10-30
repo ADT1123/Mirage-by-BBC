@@ -4,6 +4,7 @@
 
 const PACKS = [
   { id: 'glass', name: 'Glass & Chrome', desc: 'Liquid glass and molten metal, lit like a studio' },
+  { id: 'liquid', name: 'Liquid', desc: 'Chrome blobs, a soap bubble, ink in water and a koi pond. They all react to your cursor' },
   { id: 'silk', name: 'Silk', desc: 'Satin folds that slowly breathe' },
   { id: 'land', name: 'Landscapes', desc: 'Dunes, northern lights and a live sky' },
   { id: 'astro', name: 'Astronomy', desc: 'The Sun, every planet and tonight’s Moon, from real maps. Click a planet to zoom' },
@@ -28,6 +29,15 @@ const WALLS = [
   shader('glass', 'chrome-gold', 'Gold Chrome', 'chrome', [1, 0.65, 0.2], [1, 0.35, 0.1], [1, 0.82, 0.5]),
   shader('glass', 'chrome-ice', 'Ice Chrome', 'chrome', [0.4, 0.7, 1], [0.8, 0.95, 1], [0.85, 0.9, 1]),
 
+  shader('liquid', 'koi-pond', 'Koi Pond', 'koi', [0.95, 0.3, 0.1], [0.15, 0.4, 0.35], [1, 0.55, 0.75]),
+  shader('liquid', 'koi-lagoon', 'Lagoon Koi', 'koi', [1, 0.5, 0.15], [0.1, 0.35, 0.5], [1, 0.95, 0.9]),
+  shader('liquid', 'ink-water', 'Ink in Water', 'ink', [0.1, 0.25, 0.85], [0.85, 0.15, 0.35], [0.05, 0.6, 0.6]),
+  shader('liquid', 'ink-sunset', 'Sunset Ink', 'ink', [1, 0.45, 0.1], [0.9, 0.15, 0.4], [0.45, 0.15, 0.75]),
+  shader('liquid', 'blobs-chrome', 'Chrome Blobs', 'blobs', [1, 0.3, 0.6], [0.2, 0.75, 1], [1, 0.75, 0.3]),
+  shader('liquid', 'blobs-aurora', 'Aurora Blobs', 'blobs', [0.2, 1, 0.7], [0.5, 0.3, 1], [0.3, 0.6, 1]),
+  shader('liquid', 'bubble-soap', 'Soap Bubble', 'bubble', [1, 0.55, 0.4], [0.45, 0.65, 1], [0.95, 0.5, 0.85]),
+  shader('liquid', 'bubble-dusk', 'Dusk Bubble', 'bubble', [1, 0.4, 0.25], [0.35, 0.25, 0.7], [1, 0.7, 0.35]),
+
   shader('silk', 'silk-dusk', 'Dusk', 'silk', [0.1, 0.04, 0.32], [0.55, 0.12, 0.45], [1, 0.45, 0.3]),
   shader('silk', 'silk-abyss', 'Abyss', 'silk', [0.01, 0.03, 0.1], [0.03, 0.22, 0.36], [0.5, 0.82, 0.95]),
   shader('silk', 'silk-rose', 'Rosé', 'silk', [0.25, 0.03, 0.1], [0.75, 0.2, 0.35], [1, 0.7, 0.65]),
@@ -51,6 +61,7 @@ const WALLS = [
   { id: 'astro-earth', pack: 'astro', name: 'Earth', kind: 'astro', body: 'earth', skin: 'astro' },
   { id: 'astro-city', pack: 'astro', name: 'Your City', kind: 'astro', body: 'city', skin: 'astro' },
   { id: 'astro-moon', pack: 'astro', name: 'Moon', kind: 'astro', body: 'moon', skin: 'astro' },
+  { id: 'astro-earthrise', pack: 'astro', name: 'Earthrise', kind: 'astro', body: 'earthrise', skin: 'astro' },
   { id: 'astro-sun', pack: 'astro', name: 'Sun', kind: 'astro', body: 'sun', skin: 'astro' },
   { id: 'astro-mercury', pack: 'astro', name: 'Mercury', kind: 'astro', body: 'mercury', skin: 'astro' },
   { id: 'astro-venus', pack: 'astro', name: 'Venus', kind: 'astro', body: 'venus', skin: 'astro' },

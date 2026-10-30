@@ -1546,6 +1546,7 @@ body.mb-auto:not(.mb-show) .w-menubar { transform: translateY(-105%); opacity: 0
 .cc-quick4 small { font-size: 10.5px; white-space: nowrap; }
 .cc-go { width: 12px !important; height: 12px !important; flex: none; margin-left: auto; color: var(--ui-fg-3); }
 .cc-sl-title.off { display: none; }
+.cc-sl-title small { font-size: 11px; font-weight: 500; color: var(--ui-fg-3); font-variant-numeric: tabular-nums; }
 .cc-sl-title .cc-go { margin-left: 2px; }
 
 /* ------------------------------------------------------------ menu bar menus (Wi-Fi, Sound, Battery) */
@@ -1578,5 +1579,5 @@ body.mb-auto:not(.mb-show) .w-menubar { transform: translateY(-105%); opacity: 0
 @keyframes up-in { from { opacity: 0; translate: -50% -1.2rem; scale: 0.92; } }
 @keyframes up-dot { 50% { box-shadow: 0 0 0 0.45rem rgba(48, 209, 88, 0); } }
 [data-paused] .up-pill i { animation: none; }
-.cc-sl-title .cc-out { flex: none; }
+.cc-sl-title .cc-out { flex: none; width: auto; height: auto; padding: 2px 6px; border-radius: 7px; }
 .cc-sl-title .cc-out span { max-width: 170px; }

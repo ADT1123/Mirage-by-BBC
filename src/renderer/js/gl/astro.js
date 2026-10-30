@@ -4,6 +4,7 @@
 
 import { subsolar, toVec, viewRotation, homeFor } from './earth.js';
 import { moon } from '../sky.js';
+import { PRE } from './sc-galaxy.js';
 
 // ------------------------------------------------------------------ GLSL
 
@@ -239,9 +240,164 @@ void main(){
 }
 `;
 
-export const ASTRO_SHADERS = { earth: EARTH, body: BODY, sun: SUN };
+// Earthrise: standing on the Moon, the Earth hangs over a cratered horizon. The Earth is lit by
+// the real Sun and turned so the side facing the Moon right now is the side you see, so its phase
+// is today's. uCam.x - 1 = eye height (km). The ground is a ray-marched height field with
+// craters at five sizes; the Moon is small, so the horizon curves away. Its noise uses the
+// exact-integer hash: at kilometre coordinates the float one leaves seams along cell edges.
+const EARTHRISE = `${CAMERA}${PRE}
+uniform sampler2D uDay; uniform sampler2D uNit; uniform sampler2D uCld; uniform sampler2D uAlb;
+uniform vec3 uEarthD; uniform float uEarthR; uniform float uCldShift; uniform vec3 uGroundL; uniform float uEarthLit;
+const float RM = 1737.0;
+// one crater per lit cell of a grid of size s (km): a bowl with a raised rim
+float crater(vec2 p, float s, float k){
+  vec2 g = floor(p/s); vec2 f = p/s - g;
+  // two hashes per cell (each costs the shader compiler a lot); the rest is spun out of them
+  float a = H(g, k);
+  if(a < 0.42) return 0.0;
+  float b = H(g, k + 11.0);
+  vec2 c = 0.35 + 0.3*vec2(b, fract(b*13.7 + a*3.1));
+  float R = 0.06 + 0.08*fract(a*7.3 + b*1.9);
+  float r = length(f - c)/R;
+  // the rim falls to exactly nothing inside the cell, so no cliff is left at its border
+  float v = r < 1.0 ? 0.3 - 0.9*(1.0 - r*r) : 0.3*pow(max(1.0 - (r - 1.0)/1.2, 0.0), 2.0);
+  return v*R*s*(0.6 + 0.7*fract(a*19.1 + b*5.3));
+}
+// height (km) at p; t = how far away it is seen from, so distant ground skips the small craters
+float ground(vec2 p, float t){
+  vec2 q = p + vec2(41.0, 17.0);
+  float h = (F3(q*0.08) - 0.5)*0.5 + (N(q*0.03) - 0.5)*0.6;
+  // a worn ridge line in the distance
+  float rg = 1.0 - abs(N(q*0.045 + 3.0)*2.0 - 1.0);
+  h += rg*rg*rg*1.1*smoothstep(4.0, 14.0, length(p));
+  h += crater(q, 7.0, 1.0);
+  h += crater(rot(0.7)*q + 31.0, 2.3, 2.0);
+  if(t < 30.0) h += crater(rot(1.9)*q + 77.0, 0.75, 3.0);
+  if(t < 8.0) h += crater(rot(2.6)*q + 13.0, 0.22, 4.0) + (N(q*6.0) - 0.5)*0.008;
+  if(t < 1.5) h += crater(rot(0.3)*q + 5.0, 0.06, 5.0) + (N(q*30.0) - 0.5)*0.0015;
+  return h - dot(p, p)/(2.0*RM);
+}
+vec3 earthAt(vec3 rd, out float cov, out vec3 glow){
+  float pxw = 2.0*uCam.z/uRes.y;
+  float ca = dot(rd, uEarthD);
+  float s = sqrt(max(1.0 - ca*ca, 0.0));
+  cov = ca > 0.0 ? smoothstep(uEarthR + pxw, uEarthR - pxw, s) : 0.0;
+  vec3 col = vec3(0.0);
+  vec3 L = uSunV;
+  if(cov > 0.0){
+    vec3 P = rd*(ca - sqrt(max(uEarthR*uEarthR - s*s, 0.0)));
+    vec3 n = normalize(P - uEarthD);
+    vec3 e = uRot*n;
+    vec2 uv = seam(equi(e));
+    vec3 day = lin(texture2D(uDay, uv).rgb);
+    vec3 nit = lin(texture2D(uNit, uv).rgb);
+    float cld = texture2D(uCld, uv + vec2(uCldShift, 0.0)).r;
+    float water = smoothstep(0.03, 0.1, day.b - day.r);
+    vec3 land = mix(vec3(dot(day, vec3(0.3, 0.55, 0.15))), day, 1.25);
+    vec3 gr = mix(land*vec3(0.78, 0.8, 0.74), day*vec3(0.09, 0.16, 0.25), water);
+    float c = smoothstep(0.06, 0.92, cld);
+    float ndl = dot(n, L);
+    vec3 sunc = vec3(1.0, 0.97, 0.92)*mix(vec3(1.0), vec3(1.0, 0.5, 0.25), exp(-pow(max(ndl, 0.0)/0.16, 2.0))*0.75);
+    vec3 surf = mix(gr, vec3(0.82, 0.84, 0.88), c)*sunc*(max(ndl, 0.0) + 0.04*smoothstep(-0.18, 0.0, ndl))*1.9;
+    float nh = max(dot(n, normalize(L - rd)), 0.0);
+    surf += vec3(1.0, 0.86, 0.66)*sunc*(pow(nh, 900.0)*2.5 + pow(nh, 60.0)*0.06)*water*(1.0 - c)*step(0.0, ndl);
+    surf += nit*vec3(1.0, 0.7, 0.4)*6.0*(1.0 - c*0.75)*(1.0 - smoothstep(-0.16, 0.06, ndl));
+    float mu = max(dot(n, -rd), 0.0);
+    vec3 sky = vec3(0.16, 0.4, 1.0)*smoothstep(-0.25, 0.5, ndl);
+    col = mix(surf, sky*0.9, pow(1.0 - mu, 2.6)*0.6);
+  }
+  // its thin blue air, lit on the day side
+  vec3 up = normalize(rd - uEarthD*ca);
+  float a = max(s - uEarthR, 0.0)/uEarthR;
+  glow = vec3(0.25, 0.5, 1.0)*exp(-a*55.0)*0.7*smoothstep(-0.3, 0.5, dot(up, L))*(1.0 - cov)*step(0.0, ca);
+  return col;
+}
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  vec3 ro0; vec3 rd; camRay(fc, ro0, rd);
+  vec3 ro = vec3(uMouse.x*0.06, 0.0, uMouse.y*0.02);
+  ro.y = ground(ro.xz, 0.0) + (uCam.x - 1.0);
+  bool hi = uQ > 1.5; // the full march and shadows on High only; Balanced runs on built-in graphics
+  // march the height field
+  float tmax = rd.y > 0.0 ? min(40.0, (1.7 - ro.y)/rd.y) : 40.0;
+  float t = 0.005; float tp = t; bool hit = false; bool above = false;
+  float steps = hi ? 160.0 : 90.0;
+  for(int i = 0; i < 160; i++){
+    if(float(i) >= steps) break;
+    if(t > tmax){ above = true; break; }
+    vec3 p = ro + rd*t;
+    float hh = p.y - ground(p.xz, t);
+    if(hh < 0.0004*t){ hit = true; break; }
+    tp = t;
+    t += max(hh*0.6, 0.003 + t*0.014);
+  }
+  if(!hit && !above && rd.y < 0.08){ hit = true; tp = t; }
+  vec3 col;
+  if(hit){
+    // pin the surface down between the last two steps
+    float a = tp; float b = t;
+    for(int i = 0; i < 5; i++){ float m = 0.5*(a + b); vec3 q = ro + rd*m; if(q.y - ground(q.xz, m) < 0.0) b = m; else a = m; }
+    t = b;
+    vec3 p = ro + rd*t;
+    float e = max(0.0015, t*0.0016);
+    // the three heights in one loop: one copy of ground() compiles much faster than three
+    vec3 hs = vec3(0.0);
+    for(int i = 0; i < 3; i++){
+      vec2 o = i == 1 ? vec2(e, 0.0) : i == 2 ? vec2(0.0, e) : vec2(0.0);
+      float v = ground(p.xz + o, t);
+      if(i == 0) hs.x = v; else if(i == 1) hs.y = v; else hs.z = v;
+    }
+    vec3 n = normalize(vec3(hs.x - hs.y, e, hs.x - hs.z));
+    // rubble and grit too small to march, as shading only
+    vec2 gq = p.xz*45.0;
+    float g0 = F3(gq);
+    vec2 gg = vec2(F3(gq + vec2(0.05, 0.0)) - g0, F3(gq + vec2(0.0, 0.05)) - g0)/0.05;
+    n = normalize(n + vec3(-gg.x, 0.0, -gg.y)*0.12*smoothstep(4.0, 0.3, t));
+    // regolith: grey, with the darker seas and bright ejecta of the real Moon map, fine grit up close
+    float m1 = dot(lin(texture2D(uAlb, p.xz*0.004 + vec2(0.31, 0.42)).rgb), vec3(0.333));
+    float m2 = dot(lin(texture2D(uAlb, p.xz*0.09).rgb), vec3(0.333));
+    vec3 alb = vec3(1.0, 0.97, 0.93)*0.11*(0.45 + 2.0*m1)*(0.6 + 1.2*m2)*(0.8 + 0.4*g0*smoothstep(4.0, 0.3, t));
+    alb *= 1.0 + (N(p.xz*900.0) - 0.5)*0.35*smoothstep(0.6, 0.05, t);
+    vec3 L = uGroundL;
+    float mu0 = max(dot(n, L), 0.0); float mu = max(dot(n, -rd), 0.001);
+    float dif = mix(mu0, 2.0*mu0/(mu0 + mu), 0.6);
+    // shadows are black-edged: there's no air to soften them
+    float sh = 1.0;
+    if(mu0 > 0.0){
+      float st = 0.004 + t*0.002;
+      float shSteps = hi ? 36.0 : 18.0;
+      for(int i = 0; i < 36; i++){
+        if(float(i) >= shSteps) break;
+        vec3 q = p + n*(0.001 + t*0.002) + L*st;
+        float hh = q.y - ground(q.xz, t);
+        if(hh < 0.0){ sh = 0.0; break; }
+        sh = min(sh, 40.0*hh/st);
+        st += max(hh*0.7, 0.008 + st*0.12);
+        if(st > 25.0) break;
+      }
+      sh = clamp(sh, 0.0, 1.0);
+    }
+    col = alb*dif*sh*vec3(1.0, 0.98, 0.95)*3.4;
+    // light bounced off the sunlit ground around keeps shadows from going pure black
+    col += alb*0.1*(0.6 + 0.4*n.y);
+    // earthshine: the Earth lights the ground softly, more when it's fuller
+    col += alb*vec3(0.5, 0.62, 0.85)*0.07*(0.15 + uEarthLit)*(0.6 + 0.4*dot(n, uEarthD));
+  } else {
+    // no air: a black sky, faint stars, the Sun if it's in view, and the Earth
+    col = space(rd, fc)*0.45;
+    float sd = dot(rd, uGroundL);
+    col += vec3(1.0, 0.96, 0.88)*(smoothstep(0.99993, 0.99997, sd)*40.0 + pow(max(sd, 0.0), 3000.0)*3.0 + pow(max(sd, 0.0), 80.0)*0.06);
+    float cov; vec3 glow;
+    vec3 ec = earthAt(rd, cov, glow);
+    col = mix(col, ec, cov) + glow;
+  }
+  gl_FragColor = vec4(finish(col, fc), 1.0);
+}
+`;
+
+export const ASTRO_SHADERS = { earth: EARTH, body: BODY, sun: SUN, earthrise: EARTHRISE };
 // the shaders that pick mip levels by screen-space derivatives
-export const DERIVATIVES = new Set(['earth', 'body', 'sun']);
+export const DERIVATIVES = new Set(['earth', 'body', 'sun', 'earthrise']);
 
 // ------------------------------------------------------------------ bodies
 
@@ -258,6 +414,26 @@ const mul = (a, b) => {
   for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) o[c * 3 + r] += a[k * 3 + r] * b[c * 3 + k];
   return o;
 };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+// a rotation (scene -> Earth's frame) that turns the point m of the Earth (unit vector) to face
+// a camera that sees the Earth's centre in direction e, north up
+function facing(m, e) {
+  const upFrom = (a) => norm([-a[0] * a[1], 1 - a[1] * a[1], -a[2] * a[1]]);
+  const A = norm(m);
+  const B = upFrom(A);
+  const C = cross(A, B);
+  const A2 = e.map((x) => -x);
+  const B2 = upFrom(A2);
+  const C2 = cross(A2, B2);
+  const o = [];
+  for (let col = 0; col < 3; col++) for (let r = 0; r < 3; r++) o[col * 3 + r] = A[r] * A2[col] + B[r] * B2[col] + C[r] * C2[col];
+  return o;
+}
+// Greenwich sidereal time (degrees)
+const gmst = (d) => (280.46061837 + 360.98564736629 * (d.getTime() / 86400000 + 2440587.5 - 2451545)) % 360;
+// where the Earth hangs in the Earthrise sky
+const EARTH_DIR = norm([0.06, 0.16, -1]);
+
 const tmul = (m, v) => [0, 1, 2].map((c) => m[c * 3] * v[0] + m[c * 3 + 1] * v[1] + m[c * 3 + 2] * v[2]); // transpose(m) * v
 
 // a nice studio light for planets we don't place by the real Sun: from the front left, a bit above
@@ -278,6 +454,8 @@ export const BODIES = {
   uranus: { shader: 'body', map: 'uranus', soft: 0.85, atm: [0.55, 0.85, 1], atmK: 0.45, spin: 0.001, tip: -0.3, roll: 1.2, caption: 'Uranus · spins on its side' },
   neptune: { shader: 'body', map: 'neptune', soft: 0.85, atm: [0.3, 0.5, 1], atmK: 0.55, spin: 0.0012, tip: 0.3, caption: 'Neptune · the windiest planet' },
   sun: { shader: 'sun', map: 'sun', spin: 0.0008, caption: 'The Sun · 150 million km away' },
+  // scene: a landscape, not a globe, so a click anywhere changes the view
+  earthrise: { shader: 'earthrise', maps: ['earth_daymap', 'earth_nightmap', 'earth_clouds'], map: 'moon', scene: true },
 };
 
 // Camera framings. d: distance from the centre in radii, up: how far the camera looks up from
@@ -287,8 +465,11 @@ const VIEWS = {
   city: { d: 1.33, up: 0.56, tan: 0.42, y: -0.13, shiftY: 0 },
   body: { d: 6.2, up: 0, tan: 0.24, shiftY: -0.02 },
   near: { d: 3.1, up: 0, tan: 0.24, shiftY: -0.1 },
+  // Earthrise: d - 1 = eye height above the ground (km); wide, or a long lens on the Earth
+  wide: { d: 1.03, up: 0.06, tan: 0.36, shiftY: 0 },
+  tele: { d: 1.03, up: 0.11, tan: 0.13, shiftY: 0 },
 };
-export const viewsFor = (body) => (body === 'earth' || body === 'city' ? ['globe', 'city'] : ['body', 'near']);
+export const viewsFor = (body) => (body === 'earth' || body === 'city' ? ['globe', 'city'] : body === 'earthrise' ? ['wide', 'tele'] : ['body', 'near']);
 export const startView = (body) => (BODIES[body]?.close ? 'city' : viewsFor(body)[0]);
 
 export function lerpView(a, b, k) {
@@ -360,6 +541,25 @@ export function frameState(body, v, ctx, time, size, mouse) {
     const day = dot(sunV, homeV) > 0;
     caption = `${home.name || 'Your location'} · ${day ? 'Day' : 'Night'}`;
     return { u, caption, home };
+  }
+  if (B.shader === 'earthrise') {
+    const now = ctx.now?.() || new Date();
+    const s = subsolar(now);
+    const m = moon(now);
+    // the spot on Earth with the Moon overhead faces us
+    const lon = ((((m.raH * 15 - gmst(now)) % 360) + 540) % 360) - 180;
+    const rot = facing(toVec(m.dec, lon), EARTH_DIR);
+    const sunV = tmul(rot, toVec(s.lat, s.lon));
+    const lit = (1 - dot(sunV, EARTH_DIR)) / 2;
+    u.uRot = rot;
+    u.uSunV = sunV;
+    // the ground's light comes from the same side as the Earth's, kept just above the horizon
+    u.uGroundL = norm([sunV[0], Math.min(0.5, Math.max(0.2, sunV[1])), sunV[2]]);
+    u.uEarthD = EARTH_DIR;
+    u.uEarthR = 0.05;
+    u.uEarthLit = lit;
+    u.uCldShift = (time * 0.00002) % 1;
+    return { u, caption: `Earth from the Moon · ${Math.round(lit * 100)}% lit` };
   }
   if (body === 'moon') {
     const m = moon(ctx.now?.() || new Date());

@@ -5,19 +5,24 @@ import { VERT, COMMON, SHADERS, RES } from './shaders.js';
 import { ASTRO_SHADERS, DERIVATIVES, BODIES, frameState, view, viewsFor, startView, lerpView, pulledBack, onBody, regionFor, sized } from './astro.js';
 import * as mood from './sc-mood.js';
 import * as galaxy from './sc-galaxy.js';
+import * as liquid from './sc-liquid.js';
+import { mountInk } from './fluid.js';
 import { local, whole, patch } from './textures.js';
 import { subsolar, toVec, homeFor } from './earth.js';
 import { drawEmoji } from './emoji.js';
 
 const STYLE = { mesh: 0, linear: 1, radial: 2 };
-const ALL = { ...SHADERS, ...ASTRO_SHADERS, ...mood.SCENES, ...galaxy.SCENES };
-const META = { ...mood.META, ...galaxy.META };
-// slow-moving scenes don't need 60 fps; scenes with hard edges keep a minimum sharpness
-const FPS = { silk: 60, dots: 60, neon: 45, gradient: 30, aurora: 30, glass: 30, chrome: 30, clay: 30, dunes: 24, earth: 30, body: 30, sun: 30 };
-const FLOOR = { glass: 0.75, chrome: 0.75, clay: 0.8, earth: 0.85, body: 0.85, sun: 0.8 };
-const SHARE = { ...RES, earth: 1, body: 1, sun: 0.9 };
+const ALL = { ...SHADERS, ...ASTRO_SHADERS, ...mood.SCENES, ...galaxy.SCENES, ...liquid.SCENES };
+const META = { ...mood.META, ...galaxy.META, ...liquid.META };
+// Frames a second while nobody touches the desktop. These scenes all move slowly, so this looks
+// the same as 60 at a fraction of the cost; moving the mouse or clicking brings full speed back
+// for a moment (ACTIVE_MS). Scenes with hard edges keep a minimum sharpness (FLOOR).
+const FPS = { silk: 30, dots: 30, neon: 30, gradient: 20, aurora: 24, glass: 30, chrome: 30, clay: 24, dunes: 24 };
+const ACTIVE_MS = 2000;
+const FLOOR = { glass: 0.75, chrome: 0.75, clay: 0.8, earth: 0.85, body: 0.85, sun: 0.8, earthrise: 0.6 };
+const SHARE = { ...RES, earth: 1, body: 1, sun: 0.9, earthrise: 1 };
 // frames per second for a planet sitting still (clouds drift and stars twinkle, slowly)
-const IDLE = { earth: 10, body: 8, sun: 15 };
+const IDLE = { earth: 10, body: 8, sun: 15, earthrise: 6 };
 for (const [k, m] of Object.entries(META)) {
   if (m.fps) FPS[k] = m.fps;
   if (m.res) SHARE[k] = m.res;
@@ -25,13 +30,14 @@ for (const [k, m] of Object.entries(META)) {
 }
 const ZERO = [0, 0, 0];
 
-// Quality tiers (Settings > Wallpaper quality). budget: GPU milliseconds a frame may take; the
-// resolution climbs to the sharpest that fits it (full screen resolution on a decent GPU).
+// Quality tiers (Settings > Wallpaper quality). load: the share of the GPU's time the wallpaper
+// may use. The resolution climbs to the sharpest that fits it (full screen on a decent GPU), so the
+// wallpaper never weighs on the PC. Slow scenes draw fewer frames, so each frame may cost more.
 const TIERS = {
-  still: { q: 0, dpr: 1, res: 0.5, fps: 1 / 20, budget: 0 }, // no GPU at all: a still picture
-  low: { q: 0, dpr: 1, res: 0.75, fps: 30, budget: 2.5 },
-  balanced: { q: 1, dpr: 2, res: 1, fps: 60, budget: 5 },
-  high: { q: 2, dpr: 2, res: 1, fps: 60, budget: 9 },
+  still: { q: 0, dpr: 1, res: 0.5, fps: 1 / 20, load: 0 }, // no GPU at all: a still picture
+  low: { q: 0, dpr: 1, res: 0.75, fps: 30, load: 0.06 },
+  balanced: { q: 1, dpr: 2, res: 1, fps: 60, load: 0.12 },
+  high: { q: 2, dpr: 2, res: 1, fps: 60, load: 0.18 },
 };
 // Auto: a dedicated GPU gets High, built-in graphics Balanced, battery saver Low. With no
 // usable GPU (old driver, VM, remote desktop) Chrome draws WebGL on the CPU: keep it still.
@@ -70,6 +76,13 @@ function envOf(ctx) {
   return [a[0] * b[0] + a[1] * b[1] + a[2] * b[2], (now.getHours() * 60 + now.getMinutes()) / 1440, rain, kind === 'snow' ? 1 : 0];
 }
 
+// which GPU this is: none (software), integrated, or dedicated
+function gpuOf(gl) {
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  const card = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
+  return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(card) ? 'none' : /nvidia|geforce|quadro|rtx|gtx|radeon\s*(\(tm\)\s*)?(rx|pro)|arc\(tm\) a|\barc a\d/i.test(card) ? 'dedicated' : 'integrated';
+}
+
 function makeRenderer(gl) {
   const progs = {};
   const buf = gl.createBuffer();
@@ -81,10 +94,7 @@ function makeRenderer(gl) {
   const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
   const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
   const textures = new Map(); // key -> { tex, src, w, h }
-  // which GPU this is: none (software), integrated, or dedicated
-  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-  const card = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
-  const gpu = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(card) ? 'none' : /nvidia|geforce|quadro|rtx|gtx|radeon\s*(\(tm\)\s*)?(rx|pro)|arc\(tm\) a|\barc a\d/i.test(card) ? 'dedicated' : 'integrated';
+  const gpu = gpuOf(gl);
   // GPU timing, so the resolution can follow what the card really costs
   const timer = gl.getExtension('EXT_disjoint_timer_query');
   let query = null;
@@ -195,6 +205,7 @@ function makeRenderer(gl) {
       set(u.uQ, v.q ?? 1);
       set(u.uEnv, v.env || [0.5, 0.5, 0, 0]);
       set(u.uTap, v.tap || [0, 0, 99, 0]);
+      set(u.uPtr, v.ptr || [9, 9, 0, 0]);
       for (const [k, val] of Object.entries(v.u || {})) set(u[k], val);
       pr.samplers.forEach((s, i) => {
         gl.activeTexture(gl.TEXTURE0 + i);
@@ -233,6 +244,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 // which uniform reads which texture
 const EARTH_TEX = { uDay: 'day', uNit: 'nit', uCld: 'cld', uDayR: 'dayR', uNitR: 'nitR', uCldR: 'cldR', uSkyT: 'sky' };
 const BODY_TEX = { uAlb: 'alb', uRingT: 'ring', uSkyT: 'sky' };
+const RISE_TEX = { ...EARTH_TEX, uAlb: 'alb' };
+const texOf = (body) => ({ earth: EARTH_TEX, earthrise: RISE_TEX })[BODIES[body].shader] || BODY_TEX;
 
 // the ring map is a 2048x125 strip; squeeze it to a power of two so it can be mipmapped
 const strips = new WeakMap();
@@ -251,7 +264,7 @@ function strip(img) {
 async function loadBody(R, body, tier, alive = () => true) {
   const B = BODIES[body];
   const sky = local('stars_milky_way').then((b) => alive() && R.texture('sky', b));
-  if (B.shader === 'earth') {
+  if (B.maps) {
     const [d, n, c] = await Promise.all(B.maps.map(local));
     // one upload per frame, so picking a wallpaper doesn't hitch
     for (const [key, img] of [['day', d], ['nit', n], ['cld', c]]) {
@@ -259,7 +272,8 @@ async function loadBody(R, body, tier, alive = () => true) {
       R.texture(key, img);
       await tick();
     }
-  } else {
+  }
+  if (B.map) {
     const a = await local(B.map);
     if (!alive()) return;
     R.texture('alb', a);
@@ -304,6 +318,17 @@ export function mountWall(host, wall, ctx0) {
 
   let gl = canvas.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'high-performance' });
   if (!gl) return fallback(host, wall, ctx);
+  if (wall.shader === 'ink') {
+    const ink = inkSim(canvas, gl, wall, () => ctx);
+    if (ink) {
+      return {
+        update(next) {
+          ctx = next;
+        },
+        destroy: ink.destroy,
+      };
+    }
+  }
   let R = makeRenderer(gl);
   const name = shaderOf(wall);
   const astro = wall.kind === 'astro';
@@ -361,11 +386,18 @@ export function mountWall(host, wall, ctx0) {
   let state = null;
   const tap = [0, 0, 99, 0];
   let tapAt = -1e9;
+  let inputAt = -1e9; // the last mouse move or click: full frame rate for a moment after it
+  // the cursor (p units) and its velocity, for the scenes that react to it
+  const ptr = [9, 9, 0, 0];
+  const ptrTo = [9, 9];
   const mouse = [0, 0];
   const mouseTo = [0, 0];
   const toP = (e) => [(e.clientX - canvas.clientWidth / 2) / canvas.clientHeight, (canvas.clientHeight / 2 - e.clientY) / canvas.clientHeight];
   const onMove = (e) => {
     if (e.clientX < 0) return;
+    inputAt = performance.now();
+    wakeSoon();
+    [ptrTo[0], ptrTo[1]] = toP(e);
     mouseTo[0] = (e.clientX / innerWidth) * 2 - 1;
     mouseTo[1] = -((e.clientY / innerHeight) * 2 - 1);
   };
@@ -375,8 +407,9 @@ export function mountWall(host, wall, ctx0) {
     const p = toP(e);
     tap[0] = p[0];
     tap[1] = p[1];
-    tapAt = performance.now();
-    if (astro && cam && onBody(cam, p, [mouse[0] * 0.012, cam.shiftY + mouse[1] * 0.008])) {
+    tapAt = inputAt = performance.now();
+    wakeSoon();
+    if (astro && cam && (BODIES[body].scene || onBody(cam, p, [mouse[0] * 0.012, cam.shiftY + mouse[1] * 0.008]))) {
       const views = viewsFor(body);
       viewName = views[(views.indexOf(viewName) + 1) % views.length];
       fly(cam, target(), 2200);
@@ -393,7 +426,9 @@ export function mountWall(host, wall, ctx0) {
   function size() {
     const T = TIERS[tier];
     const dpr = Math.min(window.devicePixelRatio || 1, T.dpr);
-    const f = Math.min(1, (SHARE[name] ?? 0.6) * scale * T.res);
+    // a blurred wallpaper (Control Center) hides fine detail, so it can render smaller
+    const soft = 1 / (1 + (ctx.cfg.wallBlur || 0) / 25);
+    const f = Math.min(1, (SHARE[name] ?? 0.6) * scale * T.res) * soft;
     const w = Math.max(2, Math.round(canvas.clientWidth * dpr * f));
     const h = Math.max(2, Math.round(canvas.clientHeight * dpr * f));
     if (canvas.width !== w || canvas.height !== h) {
@@ -402,8 +437,26 @@ export function mountWall(host, wall, ctx0) {
     }
   }
 
+  // Frames are scheduled, not polled: between frames the page sleeps on a timer instead of waking
+  // on every screen refresh (60 to 165 times a second on laptops), which keeps the CPU idle.
+  let wake = 0;
+  let due = 0;
+  function schedule(ms) {
+    clearTimeout(wake);
+    cancelAnimationFrame(raf);
+    due = performance.now() + ms;
+    if (ms > 20) wake = setTimeout(() => (raf = requestAnimationFrame(frame)), ms - 18);
+    else raf = requestAnimationFrame(frame);
+  }
+  // input during a long sleep (a planet at a few frames a second): answer it right away
+  const wakeSoon = () => due - performance.now() > 30 && schedule(0);
   function frame(t) {
-    raf = requestAnimationFrame(frame);
+    if (!alive) return;
+    schedule(render(t));
+  }
+
+  // draws a frame if one is due; returns how long until the next (ms)
+  function render(t) {
     const motion = ctx.cfg.motion !== false;
     const T = TIERS[tier];
     const dark = nightNow();
@@ -413,13 +466,14 @@ export function mountWall(host, wall, ctx0) {
     const settling = !!move || Math.abs(mouseTo[0] * 0.6 - mouse[0]) + Math.abs(mouseTo[1] * 0.6 - mouse[1]) > 0.002;
     // no animation (switched off, or no GPU): a fresh still every so often, smooth only for camera moves
     const still = !motion || tier === 'still';
-    const fps = still ? (move ? 30 : tier === 'still' ? T.fps : 1 / 30) : astro ? (settling ? T.fps : IDLE[name] || 8) : Math.min(FPS[name] || 60, T.fps);
+    const active = performance.now() - inputAt < ACTIVE_MS;
+    const fps = still ? (move ? 30 : tier === 'still' ? T.fps : 1 / 30) : astro ? (settling ? T.fps : IDLE[name] || 8) : Math.min(active ? 60 : FPS[name] || 30, T.fps);
     if (fps !== lastFps) {
       lastFps = fps;
       acc = 0;
       frames = 0;
     }
-    if (last && t - last < 1000 / fps - 3 && !easing && !move?.fresh) return;
+    if (last && t - last < 1000 / fps - 3 && !easing && !move?.fresh) return last + 1000 / fps - t;
     if (move) move.fresh = false;
     const dt = last ? Math.min(0.25, (t - last) / 1000) : 0;
     last = t;
@@ -434,11 +488,22 @@ export function mountWall(host, wall, ctx0) {
       envAt = t;
     }
     tap[2] = (t - tapAt) / 1000;
+    if (ptr[0] === 9) [ptr[0], ptr[1]] = ptrTo;
+    else if (dt > 0) {
+      const kp = Math.min(1, dt * 14);
+      const vx = ((ptrTo[0] - ptr[0]) * kp) / dt;
+      const vy = ((ptrTo[1] - ptr[1]) * kp) / dt;
+      ptr[0] += vx * dt;
+      ptr[1] += vy * dt;
+      const kv = Math.min(1, dt * 5);
+      ptr[2] += (vx - ptr[2]) * kv;
+      ptr[3] += (vy - ptr[3]) * kv;
+    }
     size();
     const look = looksOf(wall, ctx.cfg);
-    const v = { time, mouse, night, A: look.A, B: look.B, C: look.C, style: look.style, q: T.q, env, tap };
+    const v = { time, mouse, night, A: look.A, B: look.B, C: look.C, style: look.style, q: T.q, env, tap, ptr };
     if (astro) {
-      if (!ready) return;
+      if (!ready) return 50;
       if (move) {
         const p = Math.min(1, (performance.now() - move.start) / move.dur);
         const e = 1 - Math.pow(1 - p, 3);
@@ -454,7 +519,7 @@ export function mountWall(host, wall, ctx0) {
         if (a) u.uTexel = [1 / a.w, 1 / a.h];
       }
       v.u = u;
-      v.tex = BODIES[body].shader === 'earth' ? EARTH_TEX : BODY_TEX;
+      v.tex = texOf(body);
     }
     v.timed = !still;
     R.draw(name, canvas.width, canvas.height, v);
@@ -465,28 +530,33 @@ export function mountWall(host, wall, ctx0) {
       if (g != null) gpuMs = gpuMs == null ? g : gpuMs * 0.7 + g * 0.3;
       acc += dt;
       frames++;
-      // never resize the canvas mid-move (that drops frames); adjust once things are still
-      if (acc > 1.2 && !move && !settling) {
+      // never resize the canvas mid-move or while you're moving the mouse (that drops frames);
+      // adjust once things are still, against the idle frame rate
+      if (acc > 1.2 && !move && !settling && !active) {
         const top = 1 / ((SHARE[name] ?? 0.6) * T.res);
         const floor = FLOOR[name] || 0.4;
+        const budget = (T.load * 1000) / fps; // GPU ms a frame may take
         const was = scale;
         if (gpuMs != null) {
-          if (gpuMs > T.budget * 1.15 && scale > floor) scale = Math.max(floor, scale * 0.88);
-          else if (gpuMs < T.budget * 0.6 && scale < top) scale = Math.min(top, scale * 1.12);
+          if (gpuMs > budget * 1.15 && scale > floor) scale = Math.max(floor, scale * 0.88);
+          else if (gpuMs < budget * 0.75 && scale < top) scale = Math.min(top, scale * 1.12);
         } else {
           const avg = acc / frames;
           if (avg > 1.7 / fps && scale > floor) scale *= 0.85;
-          else if (avg < 1.15 / fps && scale < Math.min(top, 1.3)) scale *= 1.05;
+          else if (avg < 1.15 / fps && scale < top) scale = Math.min(top, scale * 1.05);
         }
         if (scale !== was) gpuMs = null;
         acc = 0;
         frames = 0;
       }
     }
+    canvas.gpuMs = gpuMs; // for performance tests
+    return 1000 / fps;
   }
 
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
+    clearTimeout(wake);
     cancelAnimationFrame(raf);
   });
   canvas.addEventListener('webglcontextrestored', () => {
@@ -496,14 +566,15 @@ export function mountWall(host, wall, ctx0) {
     region = null;
     loadAll();
     last = 0;
-    raf = requestAnimationFrame(frame);
+    schedule(0);
   });
-  raf = requestAnimationFrame(frame);
+  schedule(0);
 
   return {
     update(next) {
       ctx = next;
       last = 0;
+      schedule(0);
       const t = tierOf(ctx.cfg, R.gpu);
       if (t !== tier) {
         tier = t;
@@ -513,6 +584,7 @@ export function mountWall(host, wall, ctx0) {
     },
     destroy() {
       alive = false;
+      clearTimeout(wake);
       cancelAnimationFrame(raf);
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('click', onClick);
@@ -522,6 +594,17 @@ export function mountWall(host, wall, ctx0) {
       gl = null;
     },
   };
+}
+
+function inkSim(canvas, gl, wall, getCtx) {
+  const tier = tierOf(getCtx().cfg, gpuOf(gl));
+  if (tier === 'still') return null;
+  return mountInk(canvas, gl, {
+    tier,
+    look: () => looksOf(wall, getCtx().cfg),
+    night: nightNow,
+    motion: () => getCtx().cfg.motion !== false,
+  });
 }
 
 function mountEmoji(canvas, wall, getCtx, setCtx) {
@@ -589,7 +672,7 @@ export async function renderThumb(wall, cfg, night, w = 320, h = 200, opts = {})
   const ctx = opts.ctx || { cfg: cfg || {}, store: {} };
   const time = opts.time ?? 14;
   const tier = opts.tier || 'low';
-  const v = { time, mouse: opts.mouse || [0, 0], night, A: look.A, B: look.B, C: look.C, style: look.style, q: TIERS[tier].q, env: opts.env || envOf(ctx), tap: opts.tap };
+  const v = { time, mouse: opts.mouse || [0, 0], night, A: look.A, B: look.B, C: look.C, style: look.style, q: TIERS[tier].q, env: opts.env || envOf(ctx), tap: opts.tap, ptr: opts.ptr };
   if (wall.kind === 'astro') {
     await loadBody(thumbR, wall.body, tier);
     const cam = sized(wall.body, view(opts.view || startView(wall.body)));
@@ -601,7 +684,7 @@ export async function renderThumb(wall, cfg, night, w = 320, h = 200, opts = {})
       u.uTexel = [1 / a.w, 1 / a.h];
     }
     v.u = u;
-    v.tex = BODIES[wall.body].shader === 'earth' ? EARTH_TEX : BODY_TEX;
+    v.tex = texOf(wall.body);
   }
   if (!(await thumbR.compiled(name)) || !thumbR.draw(name, w, h, v)) return null;
   return thumbCanvas.toDataURL(opts.png ? 'image/png' : 'image/jpeg', 0.9);

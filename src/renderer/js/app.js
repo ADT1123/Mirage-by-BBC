@@ -110,6 +110,7 @@ async function applyLook() {
     root.dataset.bg = url ? 'image' : 'scene';
   }
   backdrop.style.setProperty('--dim', String(cfg.dim ?? 0.25));
+  applyBlur();
   applyAccent();
 
   const wall = wallOf();
@@ -125,6 +126,15 @@ async function applyLook() {
   } else {
     scene?.update(ctx());
   }
+}
+
+// Wallpaper blur (Control Center): the scene and photo layers blur, and grow just enough that
+// the soft edges stay off screen. Up to 40px at 1080p, the same look on any screen size.
+function applyBlur() {
+  const px = (Math.min(100, Math.max(0, cfg.wallBlur || 0)) / 100) * 40 * (innerHeight / 1080);
+  root.style.setProperty('--wall-blur', `${px.toFixed(1)}px`);
+  root.style.setProperty('--wall-grow', String(1 + (4 * px) / Math.max(1, Math.min(innerWidth, innerHeight))));
+  root.toggleAttribute('data-blur', px > 0);
 }
 
 function updatePill(s) {
