@@ -1,4 +1,5 @@
-import { WIDGETS, SHAPED, esc } from './widgets.js';
+import { WIDGETS, SHAPED } from './widgets.js';
+import { icon } from './icons.js';
 import { mountScene } from './scenes.js';
 import { mountWall } from './gl/engine.js';
 import { demoStore } from './demo.js';
@@ -137,16 +138,19 @@ function applyBlur() {
   root.toggleAttribute('data-blur', px > 0);
 }
 
+// "Later" hides the pill until the next push
+let laterAt = 0;
 function updatePill(s) {
   let pill = document.querySelector('.up-pill');
-  if (!s?.available) return pill?.remove();
+  if (!s?.available || s.behind <= laterAt) return pill?.remove();
   if (!pill) {
-    pill = document.createElement('button');
+    pill = document.createElement('div');
     pill.className = 'up-pill';
-    pill.addEventListener('click', () => window.wall.action('update'));
+    pill.innerHTML = `<span class="up-ic">${icon('download')}</span><b>Update ready</b><button class="up-go">Install</button><button class="up-x" title="Later">${icon('x')}</button>`;
+    pill.querySelector('.up-go').addEventListener('click', () => window.wall.action('update'));
+    pill.querySelector('.up-x').addEventListener('click', () => ((laterAt = store.update?.behind || 0), pill.remove()));
     document.body.append(pill);
   }
-  pill.innerHTML = '<i></i><b>New update</b><em>Install</em>';
   pill.title = s.changes?.length ? `What's new:\n${s.changes.join('\n')}` : 'A new version is ready';
 }
 

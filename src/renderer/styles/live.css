@@ -1570,13 +1570,16 @@ body.mb-auto:not(.mb-show) .w-menubar { transform: translateY(-105%); opacity: 0
 
 /* ------------------------------------------------------------ update pill (top centre, until you update) */
 
-.up-pill { all: unset; position: fixed; top: 3rem; left: 50%; z-index: 40; translate: -50% 0; display: flex; align-items: center; gap: 0.55rem; padding: 0.32rem 0.32rem 0.32rem 0.75rem; border-radius: 999px; font: 500 0.82rem 'Inter Variable', system-ui, sans-serif; color: #fff; background: rgba(28, 28, 32, 0.78); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0.6rem 1.6rem -0.6rem rgba(0, 0, 0, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.14); cursor: default; animation: up-in 0.5s cubic-bezier(0.2, 0.9, 0.25, 1.15); }
-.up-pill i { width: 0.5rem; height: 0.5rem; flex: none; border-radius: 50%; background: #30d158; box-shadow: 0 0 0 0.25rem rgba(48, 209, 88, 0.22); animation: up-dot 2s ease-in-out infinite; }
-.up-pill b { font-weight: 650; white-space: nowrap; }
-.up-pill em { flex: none; font-style: normal; font-weight: 650; padding: 0.24rem 0.65rem; border-radius: 999px; background: var(--accent, #0a84ff); color: #fff; transition: filter 0.15s; }
-.up-pill:hover em { filter: brightness(1.12); }
-@keyframes up-in { from { opacity: 0; translate: -50% -1.2rem; scale: 0.92; } }
-@keyframes up-dot { 50% { box-shadow: 0 0 0 0.45rem rgba(48, 209, 88, 0); } }
-[data-paused] .up-pill i { animation: none; }
+.up-pill { position: fixed; top: 3rem; left: 50%; z-index: 40; translate: -50% 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem; border-radius: 999px; font: 500 0.8rem 'Inter Variable', system-ui, sans-serif; letter-spacing: -0.005em; color: #fff; background: rgba(24, 24, 28, 0.72); backdrop-filter: blur(24px) saturate(1.8); box-shadow: 0 0.5rem 1.5rem -0.5rem rgba(0, 0, 0, 0.45), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12); white-space: nowrap; animation: up-in 0.45s cubic-bezier(0.2, 0.9, 0.25, 1); }
+.up-pill .up-ic { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; flex: none; border-radius: 50%; background: rgba(255, 255, 255, 0.1); }
+.up-pill .up-ic .ico { width: 0.9rem; height: 0.9rem; stroke-width: 2; }
+.up-pill b { font-weight: 600; padding-right: 0.15rem; }
+.up-pill button { all: unset; display: grid; place-items: center; flex: none; border-radius: 999px; cursor: default; transition: background 0.15s, color 0.15s, filter 0.15s; }
+.up-pill .up-go { height: 1.6rem; padding: 0 0.75rem; font-weight: 600; color: #111; background: #fff; }
+.up-pill .up-go:hover { filter: brightness(0.9); }
+.up-pill .up-x { width: 1.6rem; height: 1.6rem; color: rgba(255, 255, 255, 0.5); }
+.up-pill .up-x:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+.up-pill .up-x .ico { width: 0.8rem; height: 0.8rem; stroke-width: 2; }
+@keyframes up-in { from { opacity: 0; translate: -50% -0.8rem; } }
 .cc-sl-title .cc-out { flex: none; width: auto; height: auto; padding: 2px 6px; border-radius: 7px; }
 .cc-sl-title .cc-out span { max-width: 170px; }

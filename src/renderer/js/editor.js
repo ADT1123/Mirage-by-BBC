@@ -26,9 +26,9 @@ export function createEditor(app) {
 
   chrome.innerHTML = `
     <div class="ed-hint">
-      <span class="ed-dot"></span>Editing wallpaper
-      <span class="ed-sep"></span>drag to move<span class="ed-sep"></span>corner to resize<span class="ed-sep"></span>double-click to edit
-      <span class="ed-sep"></span><kbd>Ctrl D</kbd> duplicate<span class="ed-sep"></span><kbd>+</kbd><kbd>−</kbd> size<span class="ed-sep"></span><kbd>Esc</kbd> done
+      <b>Edit mode</b><span class="ed-sep"></span>
+      <span>Drag to move</span><span>Corner to resize</span><span>Double-click to edit</span><span class="ed-sep"></span>
+      <span><kbd>Ctrl</kbd><kbd>D</kbd>Duplicate</span><span><kbd>+</kbd><kbd>−</kbd>Size</span><span><kbd>Esc</kbd>Done</span>
     </div>
     <div class="ed-guide gx"></div><div class="ed-guide gy"></div>
     <div class="ed-badge"></div>
