@@ -45,7 +45,7 @@ export function start(env) {
     host = document.createElement('div');
     host.className = `pop pop-${view}`;
     chrome.replaceChildren(host);
-    const render = { note, todo, control, calendar, menu, settings, wallpapers: wallpapersView, widget: widgetEdit, weather: weatherPanel, wrapped: wrappedView, projects: projectsView, chat: chatView, update: updateView }[view];
+    const render = { note, todo, control, wifi: wifiMenu, sound: soundMenu, battery: batteryMenu, calendar, menu, settings, wallpapers: wallpapersView, widget: widgetEdit, weather: weatherPanel, wrapped: wrappedView, projects: projectsView, chat: chatView, update: updateView }[view];
     if (!render) return close();
     render(host, id, Number(scale) || 1);
     await fit();
@@ -205,29 +205,87 @@ function todo(root, id, scale) {
   paint();
 }
 
-// ---------------------------------------------------------------- control center
+// ---------------------------------------------------------------- control center + menu bar menus
+// Like macOS: Wi-Fi, Sound and Battery each have their own menu in the menu bar, so Control
+// Center only keeps the everyday switches, the two sliders and what's playing.
+
+const POWER = [
+  ['efficiency', 'Best power efficiency', 'Longer battery, quieter fans'],
+  ['balanced', 'Balanced', 'Windows decides'],
+  ['performance', 'Best performance', 'Faster, uses more power'],
+];
+const shortName = (n) => String(n || '').replace(/\s*\(.*\)\s*$/, '');
+// fill the slider tracks like macOS
+const fillSliders = (root) => root.querySelectorAll('input[type=range]').forEach((r) => r.style.setProperty('--v', `${r.value}%`));
+
+// live system state: the cached copy comes back instantly, a fresh read arrives as sys:update
+function watchSystem(paint) {
+  let state = {};
+  window.wall.sysState().then((s) => {
+    state = { ...(s || {}), ...state };
+    paint(state);
+  });
+  live.sys = (s) => {
+    state = { ...state, ...s };
+    paint(state);
+  };
+  cleanup.push(() => (live.sys = null));
+  return () => state;
+}
+
+// sliders apply while you drag (brightness goes through WMI, so it's debounced)
+function bindSliders(root) {
+  let t = null;
+  root.addEventListener('input', (e) => {
+    const k = e.target.dataset.set;
+    if (!k) return;
+    fillSliders(root);
+    clearTimeout(t);
+    const v = Number(e.target.value);
+    t = setTimeout(() => window.wall.sysSet(k, v), k === 'volume' ? 0 : 120);
+  });
+}
+
+const volumeRow = () => `
+  <div class="slide-row">
+    <label class="slider" title="Volume">${icon('volume')}<input type="range" min="0" max="100" data-set="volume" /></label>
+    <button class="cc-mute" data-mute title="Mute">${icon('mute')}</button>
+  </div>`;
+function paintVolume(root, s) {
+  if (s.volume) root.querySelector('[data-set="volume"]').value = s.volume.level;
+  root.querySelector('[data-mute]')?.classList.toggle('on', !!s.volume?.muted);
+  fillSliders(root);
+}
+async function toggleMute(root, get) {
+  const s = get();
+  const v = await window.wall.sysSet('mute', !s.volume?.muted);
+  if (v) s.volume = v;
+  paintVolume(root, s);
+}
 
 function control(root) {
+  const quick = (key, ic, label, title) => `<button data-q="${key}" title="${title}"><span class="cc-ic">${icon(ic)}</span><small>${label}</small></button>`;
   root.innerHTML = `
     <div class="panel cc">
       <div class="cc-grid">
-        <button class="cc-tile" data-drop="wifi"><span class="cc-ic" data-k="wifi-ic">${icon('wifi')}</span><span class="cc-label"><b>Wi-Fi</b><small data-k="ssid">…</small></span></button>
-        <button class="cc-tile" data-open="bluetooth"><span class="cc-ic on">${icon('bluetooth')}</span><span class="cc-label"><b>Bluetooth</b><small>Devices</small></span></button>
+        <button class="cc-tile" data-pop="wifi"><span class="cc-ic" data-k="wifi-ic">${icon('wifi')}</span><span class="cc-label"><b>Wi-Fi</b><small data-k="ssid">…</small></span>${icon('chevron', 'cc-go')}</button>
+        <button class="cc-tile" data-open="bluetooth"><span class="cc-ic on">${icon('bluetooth')}</span><span class="cc-label"><b>Bluetooth</b><small>Devices</small></span>${icon('chevron', 'cc-go')}</button>
       </div>
-      <div class="cc-drop" data-drop-for="wifi"></div>
-      <div class="cc-quick">
-        <button data-toggle="dark" title="Dark mode"><span class="cc-ic">${icon('moon')}</span><small>Dark</small></button>
-        <button data-toggle="taskbar" title="Hide the Windows taskbar"><span class="cc-ic">${icon('taskbar')}</span><small>Taskbar</small></button>
-        <button data-drop="power" title="Power mode"><span class="cc-ic on">${icon('bolt')}</span><small data-k="power">Power</small></button>
+      <div class="cc-quick cc-quick4">
+        ${quick('dark', 'moon', 'Dark', 'Dark mode')}
+        ${quick('taskbar', 'taskbar', 'Taskbar', 'Hide the Windows taskbar')}
+        ${quick('motion', 'sparkle', 'Motion', 'Wallpaper animations')}
+        ${quick('screenshot', 'camera', 'Snip', 'Take a screenshot')}
+        ${quick('edit', 'grid', 'Rearrange', 'Move and resize widgets')}
+        ${quick('wallpapers', 'image', 'Wallpaper', 'Choose a wallpaper')}
+        ${quick('lock', 'lock', 'Lock', 'Lock the PC')}
+        ${quick('settings', 'gear', 'Settings', 'Mirage settings')}
       </div>
-      <div class="cc-drop" data-drop-for="power"></div>
       <div class="cc-sliders">
+        <div class="cc-sl-title" data-k="bright-title"><span>Display</span></div>
         <label class="slider" data-k="bright-wrap" title="Brightness">${icon('sun2')}<input type="range" min="0" max="100" data-set="brightness" /></label>
-        <div class="slide-row">
-          <label class="slider" title="Volume">${icon('volume')}<input type="range" min="0" max="100" data-set="volume" /></label>
-          <button class="cc-out" data-drop="audio" title="Sound output">${icon('chevron', 'cc-chev')}</button>
-        </div>
-        <div class="cc-drop" data-drop-for="audio"></div>
+        <div class="cc-sl-title"><span>Sound</span><button class="cc-out" data-pop="sound" title="Sound output"><span data-k="out">Output</span>${icon('chevron', 'cc-go')}</button></div>
+        ${volumeRow()}
       </div>
       <div class="cc-np" data-k="np">
         <button class="np-art-sm" data-run="player" title="Open Now Playing"></button>
@@ -238,29 +296,28 @@ function control(root) {
           <button data-media="next" title="Next">${icon('next')}</button>
         </div>
       </div>
-      <div class="cc-actions">
-        <button data-run="lock" title="Lock">${icon('lock')}</button>
-        <button data-run="edit" title="Rearrange widgets">${icon('grid')}</button>
-        <button data-pop="settings" title="Wallpaper settings">${icon('gear')}</button>
-      </div>
     </div>`;
 
   const $ = (s) => root.querySelector(s);
-  let state = {};
   let media = { active: false };
-
-  const paint = () => {
-    const wifi = state.wifi;
+  const on = (k, v) => $(`[data-q="${k}"] .cc-ic`).classList.toggle('on', !!v);
+  const get = watchSystem((s) => {
+    const wifi = s.wifi;
     $('[data-k="ssid"]').textContent = !wifi ? '…' : !wifi.available ? 'No adapter' : wifi.connected ? wifi.ssid : 'Off';
     $('[data-k="wifi-ic"]').classList.toggle('on', !!wifi?.connected);
-    const tog = (k, on) => $(`[data-toggle="${k}"] .cc-ic`).classList.toggle('on', !!on);
-    tog('dark', state.dark);
-    tog('taskbar', state.taskbarHidden);
-    $('[data-k="bright-wrap"]').classList.toggle('off', state.brightness === null);
-    if (state.brightness != null) $('[data-set="brightness"]').value = state.brightness;
-    if (state.volume) $('[data-set="volume"]').value = state.volume.level;
-    fill();
-  };
+    on('dark', s.dark);
+    on('taskbar', s.taskbarHidden);
+    // desktops without a laptop panel have no brightness control
+    $('[data-k="bright-wrap"]').classList.toggle('off', s.brightness === null);
+    $('[data-k="bright-title"]').classList.toggle('off', s.brightness === null);
+    if (s.brightness != null) $('[data-set="brightness"]').value = s.brightness;
+    paintVolume(root, s);
+  });
+  on('motion', cfg.motion !== false);
+  window.wall.ccList('audio').then((list) => {
+    const d = list?.find((x) => x.default);
+    if (d) $('[data-k="out"]').textContent = shortName(d.name);
+  });
 
   // the media row only exists while something is playing
   const paintMedia = () => {
@@ -274,19 +331,6 @@ function control(root) {
     art.innerHTML = media.art ? '' : icon('volume');
     if (was !== !!media.active) fit();
   };
-
-  // fill the slider tracks like macOS
-  const fill = () => root.querySelectorAll('input[type=range]').forEach((r) => r.style.setProperty('--v', `${r.value}%`));
-
-  // cached state comes back instantly; a fresh read arrives as sys:update
-  window.wall.sysState().then((s) => {
-    state = s || {};
-    paint();
-  });
-  live.sys = (s) => {
-    state = { ...state, ...s };
-    paint();
-  };
   window.wall.media?.().then((s) => {
     media = s || media;
     paintMedia();
@@ -295,113 +339,17 @@ function control(root) {
     media = s;
     paintMedia();
   };
-  cleanup.push(() => {
-    live.sys = live.media = null;
-  });
-  paint();
+  cleanup.push(() => (live.media = null));
   paintMedia();
-
-  let t = null;
-  root.addEventListener('input', (e) => {
-    const k = e.target.dataset.set;
-    if (!k) return;
-    fill();
-    clearTimeout(t);
-    const v = Number(e.target.value);
-    // volume is instant; brightness goes through WMI, so debounce it
-    t = setTimeout(() => window.wall.sysSet(k, v), k === 'volume' ? 0 : 120);
-  });
-
-  // ---- dropdowns: one open at a time, filled from live system data
-  const POWER = [
-    ['efficiency', 'Best power efficiency', 'Longer battery, quieter fans'],
-    ['balanced', 'Balanced', 'Windows decides'],
-    ['performance', 'Best performance', 'Faster, uses more power'],
-  ];
-  let openDrop = '';
-  let lists = {};
-  const shortName = (n) => String(n || '').replace(/\s*\(.*\)\s*$/, '');
-  const paintDrop = (what) => {
-    const box = root.querySelector(`[data-drop-for="${what}"]`);
-    const data = lists[what];
-    if (what === 'wifi') {
-      box.innerHTML =
-        (data?.length
-          ? data
-              .map(
-                (n) => `<button class="cc-opt${n.connected ? ' on' : ''}" data-wifi="${esc(n.ssid)}" data-known="${n.known ? 1 : ''}">
-              <span class="cc-sig" style="--s:${Math.max(0.25, n.signal / 100)}">${icon('wifi')}</span>
-              <span class="cc-opt-t">${esc(n.ssid)}${n.known && !n.connected ? '<small>Saved</small>' : ''}</span>
-              ${n.secure ? icon('lock', 'cc-lock') : ''}${n.connected ? icon('check', 'cc-check') : ''}
-            </button>`,
-              )
-              .join('')
-          : '<div class="cc-dl">No networks found</div>') + '<button class="cc-link" data-run="wifi">Wi-Fi Settings…</button>';
-    } else if (what === 'audio') {
-      box.innerHTML =
-        (data?.length
-          ? data.map((d) => `<button class="cc-opt${d.default ? ' on' : ''}" data-audio="${esc(d.id)}">${icon('volume')}<span class="cc-opt-t">${esc(shortName(d.name))}</span>${d.default ? icon('check', 'cc-check') : ''}</button>`).join('')
-          : '<div class="cc-dl">No output devices</div>') + '<button class="cc-link" data-run="sound">Sound Settings…</button>';
-    } else if (what === 'power') {
-      box.innerHTML =
-        POWER.map(([k, label, sub]) => `<button class="cc-opt${data === k ? ' on' : ''}" data-power="${k}"><span class="cc-opt-t">${label}<small>${sub}</small></span>${data === k ? icon('check', 'cc-check') : ''}</button>`).join('') +
-        '<button class="cc-link" data-run="power">Power Settings…</button>';
-      $('[data-k="power"]').textContent = { efficiency: 'Efficient', balanced: 'Balanced', performance: 'Fast' }[data] || 'Power';
-    }
-    if (what === 'audio') $('.cc-out').title = `Sound output: ${shortName(data?.find((d) => d.default)?.name) || 'default'}`;
-  };
-  const load = async (what) => {
-    lists[what] = await window.wall.ccList(what);
-    paintDrop(what);
-    fit();
-  };
-  const toggleDrop = (what) => {
-    openDrop = openDrop === what ? '' : what;
-    root.querySelectorAll('.cc-drop').forEach((d) => d.classList.toggle('open', d.dataset.dropFor === openDrop));
-    root.querySelectorAll('[data-drop]').forEach((b) => b.classList.toggle('open', b.dataset.drop === openDrop));
-    if (openDrop && !lists[openDrop]) root.querySelector(`[data-drop-for="${openDrop}"]`).innerHTML = '<div class="cc-dl">Loading…</div>';
-    fit();
-    if (openDrop) load(openDrop); // always refresh: networks come and go
-    // Wi-Fi: show what Windows remembers now, then the result of a fresh scan
-    if (openDrop === 'wifi')
-      window.wall.ccScan?.().then((list) => {
-        if (openDrop !== 'wifi' || !list) return;
-        lists.wifi = list;
-        paintDrop('wifi');
-        fit();
-      });
-  };
-  // labels on the closed rows
-  load('power');
-  load('audio');
+  bindSliders(root);
 
   root.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.drop) return toggleDrop(b.dataset.drop);
-    if (b.dataset.wifi !== undefined) {
-      // saved networks connect right here; new ones need a password, so open Settings
-      if (!b.dataset.known) return window.wall.action('wifi');
-      b.querySelector('.cc-opt-t').insertAdjacentHTML('beforeend', '<small>Connecting…</small>');
-      await window.wall.sysSet('wifi-join', b.dataset.wifi);
-      setTimeout(() => load('wifi'), 2500);
-      return;
-    }
-    if (b.dataset.audio) {
-      lists.audio = (lists.audio || []).map((d) => ({ ...d, default: d.id === b.dataset.audio }));
-      paintDrop('audio');
-      lists.audio = await window.wall.sysSet('audio-out', b.dataset.audio);
-      return paintDrop('audio');
-    }
-    if (b.dataset.power) {
-      lists.power = b.dataset.power;
-      paintDrop('power');
-      lists.power = await window.wall.sysSet('power', b.dataset.power);
-      return paintDrop('power');
-    }
     if (b.dataset.pop) return window.wall.popup(b.dataset.pop, { y: 34 });
     if (b.dataset.open) return window.wall.action(b.dataset.open);
     if (b.dataset.run) return window.wall.action(b.dataset.run);
+    if (b.dataset.mute !== undefined) return toggleMute(root, get);
     if (b.dataset.media) {
       window.wall.mediaCmd(b.dataset.media);
       if (b.dataset.media === 'toggle') {
@@ -410,15 +358,142 @@ function control(root) {
       }
       return;
     }
-    if (b.dataset.act === 'mute') {
-      state.volume = await window.wall.sysSet('mute', !state.volume?.muted);
-      return paint();
+    const q = b.dataset.q;
+    if (q === 'dark' || q === 'taskbar') {
+      const s = get();
+      const key = q === 'dark' ? 'dark' : 'taskbarHidden';
+      on(q, !s[key]); // optimistic: flip now, confirm when Windows answers
+      s[key] = await window.wall.sysSet(q, !s[key]);
+      on(q, s[key]);
+    } else if (q === 'motion') {
+      cfg.motion = cfg.motion === false;
+      on('motion', cfg.motion);
+      save();
+    } else if (q === 'wallpapers' || q === 'settings') window.wall.popup(q, { y: 34 });
+    else if (q) window.wall.action(q);
+  });
+}
+
+// ---- Wi-Fi menu (menu bar)
+function wifiMenu(root) {
+  root.innerHTML = `
+    <div class="panel mm">
+      <div class="mm-head"><b>Wi-Fi</b><small data-k="state"></small></div>
+      <div class="mm-list" data-k="list"><div class="cc-dl">Looking for networks…</div></div>
+      <button class="cc-link" data-run="wifi">Wi-Fi Settings…</button>
+    </div>`;
+  const $ = (s) => root.querySelector(s);
+  watchSystem((s) => {
+    const w = s.wifi;
+    $('[data-k="state"]').textContent = !w ? '' : !w.available ? 'No adapter' : w.connected ? `Connected · ${w.ssid}` : 'Not connected';
+  });
+  const paint = (list) => {
+    $('[data-k="list"]').innerHTML = list?.length
+      ? list
+          .map(
+            (n) => `<button class="cc-opt${n.connected ? ' on' : ''}" data-wifi="${esc(n.ssid)}" data-known="${n.known ? 1 : ''}">
+              <span class="cc-sig" style="--s:${Math.max(0.25, n.signal / 100)}">${icon('wifi')}</span>
+              <span class="cc-opt-t">${esc(n.ssid)}${n.known && !n.connected ? '<small>Saved</small>' : ''}</span>
+              ${n.secure ? icon('lock', 'cc-lock') : ''}${n.connected ? icon('check', 'cc-check') : ''}
+            </button>`,
+          )
+          .join('')
+      : '<div class="cc-dl">No networks found</div>';
+    fit();
+  };
+  // what Windows remembers right away, then the result of a fresh scan
+  const load = () => window.wall.ccList('wifi').then(paint);
+  load().then(() => window.wall.ccScan?.().then((list) => list && paint(list)));
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.run) return window.wall.action(b.dataset.run);
+    if (b.dataset.wifi === undefined) return;
+    // saved networks connect right here; new ones need a password, so open Settings
+    if (!b.dataset.known) return window.wall.action('wifi');
+    b.querySelector('.cc-opt-t').insertAdjacentHTML('beforeend', '<small>Connecting…</small>');
+    await window.wall.sysSet('wifi-join', b.dataset.wifi);
+    setTimeout(load, 2500);
+  });
+}
+
+// ---- Sound menu (menu bar)
+function soundMenu(root) {
+  root.innerHTML = `
+    <div class="panel mm">
+      <div class="mm-head"><b>Sound</b></div>
+      ${volumeRow()}
+      <div class="mm-sub">Output</div>
+      <div class="mm-list" data-k="list"><div class="cc-dl">Loading…</div></div>
+      <button class="cc-link" data-run="sound">Sound Settings…</button>
+    </div>`;
+  const get = watchSystem((s) => paintVolume(root, s));
+  bindSliders(root);
+  let list = [];
+  const paint = () => {
+    root.querySelector('[data-k="list"]').innerHTML = list?.length
+      ? list.map((d) => `<button class="cc-opt${d.default ? ' on' : ''}" data-audio="${esc(d.id)}">${icon('volume')}<span class="cc-opt-t">${esc(shortName(d.name))}</span>${d.default ? icon('check', 'cc-check') : ''}</button>`).join('')
+      : '<div class="cc-dl">No output devices</div>';
+    fit();
+  };
+  window.wall.ccList('audio').then((l) => {
+    list = l || [];
+    paint();
+  });
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.run) return window.wall.action(b.dataset.run);
+    if (b.dataset.mute !== undefined) return toggleMute(root, get);
+    if (b.dataset.audio) {
+      list = list.map((d) => ({ ...d, default: d.id === b.dataset.audio }));
+      paint();
+      list = (await window.wall.sysSet('audio-out', b.dataset.audio)) || list;
+      paint();
     }
-    if (b.dataset.toggle) {
-      const key = b.dataset.toggle === 'dark' ? 'dark' : 'taskbarHidden';
-      state[key] = !state[key];
-      paint(); // optimistic: flip now, confirm when Windows answers
-      state[key] = await window.wall.sysSet(b.dataset.toggle, state[key]);
+  });
+}
+
+// ---- Battery menu (menu bar): charge, and the Windows power mode
+function batteryMenu(root) {
+  root.innerHTML = `
+    <div class="panel mm">
+      <div class="mm-head"><b>Battery</b><small data-k="state"></small></div>
+      <div class="mm-bat"><i data-k="bar"></i></div>
+      <div class="mm-sub">Power mode</div>
+      <div class="mm-list" data-k="list"></div>
+      <button class="cc-link" data-run="battery">Battery Settings…</button>
+    </div>`;
+  const $ = (s) => root.querySelector(s);
+  window.wall.power?.().then((p) => {
+    if (!p?.hasBattery) {
+      $('[data-k="state"]').textContent = 'Plugged in · no battery';
+      $('.mm-bat').remove();
+      return fit();
+    }
+    const pct = Math.round((p.level ?? 1) * 100);
+    $('[data-k="state"]').textContent = `${pct}% · ${p.charging ? 'Charging' : p.ac ? 'Plugged in' : 'On battery'}${p.saver ? ' · Saver on' : ''}`;
+    $('[data-k="bar"]').style.width = `${pct}%`;
+    $('.mm-bat').classList.toggle('low', pct <= 20 && !p.ac);
+  });
+  let mode = null;
+  const paint = () => {
+    $('[data-k="list"]').innerHTML = POWER.map(([k, label, sub]) => `<button class="cc-opt${mode === k ? ' on' : ''}" data-power="${k}"><span class="cc-opt-t">${label}<small>${sub}</small></span>${mode === k ? icon('check', 'cc-check') : ''}</button>`).join('');
+    fit();
+  };
+  paint();
+  window.wall.ccList('power').then((m) => {
+    mode = m;
+    paint();
+  });
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.run) return window.wall.action(b.dataset.run);
+    if (b.dataset.power) {
+      mode = b.dataset.power;
+      paint();
+      mode = (await window.wall.sysSet('power', mode)) || mode;
       paint();
     }
   });
@@ -611,6 +686,8 @@ function settings(root) {
           ${pick('season', 'Season', cfg.season ?? 'off', [['off', 'Off'], ['auto', 'Auto'], ['spring', 'Spring'], ['summer', 'Summer'], ['autumn', 'Autumn'], ['winter', 'Winter']])}
           ${pick('pet', 'Desktop pet', cfg.pet ?? 'cat', [['off', 'Off'], ['cat', 'Cat'], ['bird', 'Bird']])}
           ${pick('perf', 'Performance', cfg.perf ?? 'auto', [['auto', 'Auto'], ['saver', 'Battery saver'], ['full', 'Full quality']])}
+          ${pick('wallQuality', 'Wallpaper quality', cfg.wallQuality ?? 'auto', [['auto', 'Auto'], ['low', 'Low'], ['balanced', 'Balanced'], ['high', 'High']])}
+          ${pick('gpu', 'Graphics', cfg.gpu ?? 'dedicated', [['dedicated', 'Fast GPU'], ['integrated', 'Power saving']])}
         </div>
 
         <div class="sm-card">
@@ -686,9 +763,12 @@ function settings(root) {
       return paint();
     }
     if (b.dataset.pickK) {
+      const changed = cfg[b.dataset.pickK] !== b.dataset.pickV;
       cfg[b.dataset.pickK] = b.dataset.pickV;
       openPick = '';
-      save();
+      await save();
+      // the GPU is chosen when Mirage starts
+      if (b.dataset.pickK === 'gpu' && changed) return window.wall.action('relaunch');
       return paint();
     }
     if (b.dataset.more !== undefined) {

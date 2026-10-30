@@ -7,3 +7,13 @@
 @import url('../../../node_modules/@fontsource/pixelify-sans/400.css');
 @import url('../../../node_modules/@fontsource/pixelify-sans/700.css');
 @import url('../../../node_modules/@fontsource/tiro-devanagari-sanskrit/400.css');
+
+/* Mirage Pixel: our own crisp 5x7 bitmap font (built by scripts/pixel-font.cjs).
+   One weight covers 100-900, so bold text uses the real pixels instead of a smeared faux bold. */
+@font-face {
+  font-family: 'Mirage Pixel';
+  src: url('../../../assets/fonts/mirage-pixel.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}

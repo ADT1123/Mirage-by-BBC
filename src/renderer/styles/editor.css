@@ -358,3 +358,18 @@ kbd {
 .thumb[data-t='bhakti'] i:nth-child(1) { background: #f2cf7a; box-shadow: none; height: 12%; }
 .thumb[data-t='bhakti'] i:nth-child(2) { right: 14%; top: 14%; width: 26%; height: 58%; border-radius: 2rem 2rem 0.2rem 0.2rem; }
 .thumb[data-t='bhakti'] i:nth-child(3) { left: 9%; right: auto; top: 52%; width: 34%; height: 26%; }
+
+/* ------------------------------------------------------------ widget toolbar extras */
+
+.w-tools button:hover { background: var(--ui-tile-2, rgba(255, 255, 255, 0.14)); }
+.w-tools button .ico { width: 0.95rem; height: 0.95rem; }
+.w-tools button.on { background: var(--ui-accent); color: #fff; }
+/* a locked widget shows a quiet dashed outline and doesn't move */
+.editing .w.locked { cursor: default; }
+.editing .w.locked::before { border: 1.5px dashed rgba(255, 255, 255, 0.35); }
+.editing .w.locked > .w-resize { display: none; }
+
+/* size / hint readout next to the widget */
+.ed-badge { position: fixed; z-index: 30; translate: -100% 0; padding: 0.3rem 0.6rem; border-radius: 0.6rem; font: 600 0.78rem 'Inter Variable', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: #fff; background: rgba(20, 20, 24, 0.82); backdrop-filter: blur(12px); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.16); pointer-events: none; opacity: 0; transition: opacity 0.18s; white-space: nowrap; }
+.ed-badge.on { opacity: 1; }
+.ed-hint kbd { padding: 0.05rem 0.35rem; margin: 0 0.1rem; border-radius: 0.35rem; font: 600 0.72rem 'Inter Variable', system-ui, sans-serif; background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25); }

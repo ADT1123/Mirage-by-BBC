@@ -1,4 +1,4 @@
-import { WIDGETS, SHAPED } from './widgets.js';
+import { WIDGETS, SHAPED, esc } from './widgets.js';
 import { mountScene } from './scenes.js';
 import { mountWall } from './gl/engine.js';
 import { demoStore } from './demo.js';
@@ -125,6 +125,20 @@ async function applyLook() {
   } else {
     scene?.update(ctx());
   }
+}
+
+function updatePill(s) {
+  let pill = document.querySelector('.up-pill');
+  if (!s?.available) return pill?.remove();
+  if (!pill) {
+    pill = document.createElement('button');
+    pill.className = 'up-pill';
+    pill.addEventListener('click', () => window.wall.action('update'));
+    document.body.append(pill);
+  }
+  const what = s.changes?.[0] ? `<span>${esc(s.changes[0])}</span>` : '';
+  pill.innerHTML = `<i></i><b>Update available</b>${what}<em>Install</em>`;
+  pill.title = s.behind > 1 ? `${s.behind} new changes` : 'A new version is ready';
 }
 
 // your own accent for the whole theme (Settings), including the commit graph.
@@ -335,7 +349,7 @@ let dockKey = '';
 async function pollWeather(force = false) {
   // weather is also needed for rain/snow on the desktop itself
   // weather also tells the Earth wallpaper where you are
-  if (!has('weather') && theme() !== 'weather' && cfg.appearance !== 'sun' && wallOf()?.kind !== 'astro' && !(AMBIENT && cfg.weatherFx !== 'off')) return;
+  if (!has('weather') && theme() !== 'weather' && cfg.appearance !== 'sun' && !['astro', 'shader'].includes(wallOf()?.kind) && !(AMBIENT && cfg.weatherFx !== 'off')) return;
   store.weather = await window.wall.weather(force);
   if (store.weather?.ok) sunTimes = { rise: store.weather.sunrise, set: store.weather.sunset };
   if (cfg.appearance === 'sun') applyLook();
@@ -570,10 +584,16 @@ async function boot() {
   dockKey = JSON.stringify(cfg.dock ?? null);
   pollDock();
   watchBattery();
-  // a new version on GitHub shows as a small "Update" in the menu bar
+  // a new version on GitHub shows as "Update" in the menu bar, and as a pill at the top of the
+  // screen that stays put (the menu bar may be tucked away) until you update
   if (MODE === 'wallpaper' && PRIMARY && !DEMO && window.wall.updateStatus) {
-    window.wall.updateStatus().then((s) => ((store.update = s), render()));
-    window.wall.onUpdate((s) => ((store.update = s), render()));
+    const got = (s) => {
+      store.update = s;
+      updatePill(s);
+      render();
+    };
+    window.wall.updateStatus().then(got);
+    window.wall.onUpdate(got);
   }
   // the Assistant widget previews the latest answer
   const pollChat = () => has('assistant') && window.wall.chatHistory?.().then((h) => {

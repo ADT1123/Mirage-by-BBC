@@ -13,6 +13,7 @@ export function createEditor(app) {
   const { info } = app.ctx();
   const chrome = document.getElementById('chrome');
   const history = [];
+  const future = []; // undone steps, for redo
   let panel = null;
   let selected = null;
   let usePack = false;
@@ -26,9 +27,11 @@ export function createEditor(app) {
   chrome.innerHTML = `
     <div class="ed-hint">
       <span class="ed-dot"></span>Editing wallpaper
-      <span class="ed-sep"></span>drag to move<span class="ed-sep"></span>drag corner to resize<span class="ed-sep"></span><kbd>Esc</kbd> done
+      <span class="ed-sep"></span>drag to move<span class="ed-sep"></span>corner to resize<span class="ed-sep"></span>double-click to edit
+      <span class="ed-sep"></span><kbd>Ctrl D</kbd> duplicate<span class="ed-sep"></span><kbd>+</kbd><kbd>−</kbd> size<span class="ed-sep"></span><kbd>Esc</kbd> done
     </div>
     <div class="ed-guide gx"></div><div class="ed-guide gy"></div>
+    <div class="ed-badge"></div>
     <div class="ed-panel" data-panel="themes"><div class="ed-wp"></div></div>
     <div class="ed-panel" data-panel="widgets">
       <div class="ed-panel-head"><span>Widgets</span><span class="ed-sub">click to add or remove</span></div>
@@ -45,6 +48,7 @@ export function createEditor(app) {
       <button data-open="settings">${icon('sliders')}<span>Settings</span></button>
       <span class="ed-div"></span>
       <button data-act="undo" title="Undo (Ctrl+Z)">${icon('undo')}</button>
+      <button data-act="redo" title="Redo (Ctrl+Y)">${icon('redo')}</button>
       <button data-act="reset" title="Reset to the theme's pack layout">${icon('reset')}</button>
       <span class="ed-div"></span>
       <button class="ed-done" data-act="done">${icon('check')}<span>Done</span></button>
@@ -149,6 +153,8 @@ export function createEditor(app) {
         return done();
       case 'undo':
         return undo();
+      case 'redo':
+        return redo();
       case 'reset': {
         const layout = await window.wall.preset(app.cfg.theme);
         return app.commit((c) => (c.widgets = layout));
@@ -212,14 +218,26 @@ export function createEditor(app) {
 
   // ---------------------------------------------------------------- history
 
+  // every change remembers the layout before it; a new change forgets what was undone
   function remember(cfg) {
     history.push(JSON.stringify(cfg));
-    if (history.length > 60) history.shift();
+    if (history.length > 80) history.shift();
+    future.length = 0;
   }
 
   function undo() {
     const prev = history.pop();
-    if (prev) app.replace(JSON.parse(prev));
+    if (!prev) return;
+    future.push(JSON.stringify(app.cfg));
+    app.replace(JSON.parse(prev));
+    if (panel) fill(panel);
+  }
+
+  function redo() {
+    const next = future.pop();
+    if (!next) return;
+    history.push(JSON.stringify(app.cfg));
+    app.replace(JSON.parse(next));
     if (panel) fill(panel);
   }
 
@@ -277,7 +295,14 @@ export function createEditor(app) {
     tools.innerHTML =
       (w.type === 'note'
         ? info.noteColors.map((c) => `<button class="nc${c === w.color ? ' on' : ''}" data-color="${c}" title="${c}"></button>`).join('') + '<span class="ed-div"></span>'
-        : '') + `<button class="w-cfg" title="Edit widget">${icon('sliders')}</button><button class="w-del" title="Remove">${icon('x')}</button>`;
+        : '') +
+      `<button class="w-cfg" data-tool="edit" title="Edit widget (double-click)">${icon('sliders')}</button>` +
+      (canCopy(w) ? `<button data-tool="copy" title="Duplicate (Ctrl+D)">${icon('copy')}</button>` : '') +
+      `<button data-tool="front" title="Bring to front">${icon('front')}</button>` +
+      `<button data-tool="center" title="Center on screen">${icon('center')}</button>` +
+      `<button data-tool="lock" class="${w.locked ? 'on' : ''}" title="${w.locked ? 'Unlock' : 'Lock in place'} (L)">${icon(w.locked ? 'lock' : 'unlock')}</button>` +
+      `<span class="ed-div"></span><button class="w-del" title="Remove (Delete)">${icon('x')}</button>`;
+    el.classList.toggle('locked', !!w.locked);
     el.append(tools);
     if (w.type !== 'menubar') {
       const h = document.createElement('div');
@@ -320,13 +345,66 @@ export function createEditor(app) {
     const id = el.dataset.id;
     const color = e.target.closest('.nc');
     if (color) return updateWidget(id, (x) => (x.color = color.dataset.color));
-    if (e.target.closest('.w-cfg')) return editWidget(id);
+    const tool = e.target.closest('[data-tool]')?.dataset.tool;
+    if (tool === 'edit') return editWidget(id);
+    if (tool === 'copy') return duplicate(id);
+    if (tool === 'front') return toFront(id);
+    if (tool === 'center') return centerX(id);
+    if (tool === 'lock') return updateWidget(id, (x) => (x.locked = !x.locked));
     if (e.target.closest('.w-del')) return removeWidget(id);
     const del = e.target.closest('.todo-del');
     if (del) return updateWidget(id, (x) => x.items.splice(Number(del.dataset.i), 1));
     const item = e.target.closest('.todo-item');
     if (item && !e.target.closest('[data-edit]')) return updateWidget(id, (x) => (x.items[item.dataset.i].done = !x.items[item.dataset.i].done));
   });
+
+  app.stage.addEventListener('dblclick', (e) => {
+    const el = e.target.closest('.w');
+    if (el && el.dataset.id !== 'menubar' && !e.target.closest('[data-edit], input')) editWidget(el.dataset.id);
+  });
+
+  // ---------------------------------------------------------------- quick actions
+
+  const canCopy = (w) => !!info.widgets.find((m) => m.type === w.type)?.multi;
+  function duplicate(id) {
+    const w = app.cfg.widgets.find((x) => x.id === id);
+    if (!w || !canCopy(w)) return;
+    const copy = { ...structuredClone(w), id: `${w.type}-${Math.random().toString(36).slice(2, 7)}`, locked: false };
+    copy.x = Number(Math.min(0.94, w.x + 0.02).toFixed(4));
+    copy.y = Number(Math.min(0.94, w.y + 0.03).toFixed(4));
+    app.commit((c) => c.widgets.push(copy));
+    requestAnimationFrame(() => select(copy.id));
+  }
+  // later in the list draws on top
+  function toFront(id) {
+    app.commit((c) => {
+      const i = c.widgets.findIndex((x) => x.id === id);
+      if (i >= 0) c.widgets.push(...c.widgets.splice(i, 1));
+    });
+    requestAnimationFrame(() => select(id));
+  }
+  function centerX(id) {
+    const el = app.recs.get(id)?.el;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    updateWidget(id, (x) => (x.x = Number((x.align === 'center' ? 0.5 : (innerWidth - r.width) / 2 / innerWidth).toFixed(4))));
+  }
+  function rescale(id, by) {
+    updateWidget(id, (x) => (x.scale = Number(Math.min(2.6, Math.max(0.45, (x.scale || 1) * by)).toFixed(3))));
+    const w = app.cfg.widgets.find((x) => x.id === id);
+    if (w) flash(`${Math.round((w.scale || 1) * 100)}%`);
+  }
+  // a small readout (size while resizing) that fades by itself
+  const badge = $('.ed-badge');
+  let badgeT = 0;
+  function flash(text, at) {
+    badge.textContent = text;
+    const r = at || app.recs.get(selected)?.el.getBoundingClientRect();
+    if (r) badge.style.cssText = `left:${Math.round(r.right)}px;top:${Math.round(r.bottom + 10)}px`;
+    badge.classList.add('on');
+    clearTimeout(badgeT);
+    badgeT = setTimeout(() => badge.classList.remove('on'), 900);
+  }
 
   // ---------------------------------------------------------------- drag + resize
 
@@ -343,6 +421,7 @@ export function createEditor(app) {
     if (e.target.closest('[data-edit], input, button, .todo-item')) return;
     const w = app.cfg.widgets.find((x) => x.id === el.dataset.id);
     if (!w) return;
+    if (w.locked) return flash('Locked · press L to unlock', el.getBoundingClientRect());
     const r = el.getBoundingClientRect();
     drag = {
       el,
@@ -363,14 +442,25 @@ export function createEditor(app) {
     e.preventDefault();
   });
 
+  let pending = null;
   app.stage.addEventListener('pointermove', (e) => {
     if (!drag) return;
+    const first = !pending;
+    pending = e;
+    if (first) requestAnimationFrame(() => {
+      const ev = pending;
+      pending = null;
+      if (drag && ev) moveTo(ev);
+    });
+  });
+  function moveTo(e) {
     const W = innerWidth;
     const H = innerHeight;
     if (drag.mode === 'resize') {
       const s = Math.min(2.6, Math.max(0.45, drag.scale * ((drag.width + (e.clientX - drag.sx)) / drag.width)));
       drag.el.style.setProperty('--s', s.toFixed(3));
       drag.next = { scale: Number(s.toFixed(3)) };
+      flash(`${Math.round(s * 100)}%`, drag.el.getBoundingClientRect());
       return;
     }
     let x = drag.left + e.clientX - drag.sx;
@@ -398,10 +488,12 @@ export function createEditor(app) {
     drag.el.style.left = `${ax}px`;
     drag.el.style.top = `${y}px`;
     drag.next = { x: Number((ax / W).toFixed(4)), y: Number((y / H).toFixed(4)) };
-  });
+  }
 
   function endDrag() {
     if (!drag) return;
+    if (pending) moveTo(pending);
+    pending = null;
     const { id, next, el } = drag;
     el.classList.remove('dragging');
     drag = null;
@@ -426,8 +518,27 @@ export function createEditor(app) {
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') return panel ? open(panel) : done();
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') return undo();
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    if (mod && key === 'z') return e.shiftKey ? redo() : undo();
+    if (mod && key === 'y') return redo();
+    // Tab walks through the widgets
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const ids = app.cfg.widgets.map((w) => w.id).filter((id) => id !== 'menubar' && app.recs.has(id));
+      if (!ids.length) return;
+      const i = ids.indexOf(selected);
+      return select(ids[(i + (e.shiftKey ? ids.length - 1 : 1)) % ids.length]);
+    }
     if (!selected) return;
+    if (mod && key === 'd') {
+      e.preventDefault();
+      return duplicate(selected);
+    }
+    if (e.key === 'Enter') return editWidget(selected);
+    if (key === 'l' && !mod) return updateWidget(selected, (x) => (x.locked = !x.locked));
+    if (e.key === '+' || e.key === '=') return rescale(selected, 1.06);
+    if (e.key === '-' || e.key === '_') return rescale(selected, 1 / 1.06);
     if (e.key === 'Delete' || e.key === 'Backspace') return removeWidget(selected);
     const step = e.shiftKey ? 0.02 : 0.002;
     const mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];

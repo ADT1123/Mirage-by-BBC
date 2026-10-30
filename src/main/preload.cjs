@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('wall', {
   pickImages: () => ipcRenderer.invoke('dialog:images'),
   closeEditor: () => ipcRenderer.invoke('editor:close'),
   fileUrl: (p) => ipcRenderer.invoke('app:file-url', p),
+  planetMap: (name) => ipcRenderer.invoke('planets:map', name),
   popup: (view, data) => ipcRenderer.invoke('popup:open', view, data),
   closePopup: () => ipcRenderer.invoke('popup:close'),
   popupResize: (w, h) => ipcRenderer.invoke('popup:resize', w, h),

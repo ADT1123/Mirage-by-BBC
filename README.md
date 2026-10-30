@@ -91,6 +91,10 @@ except weather, quotes and GitHub contributions, which are fetched from public A
 - **Commit graph is empty:** `brow github <your-username>` or `brow repo scan <projects-folder>`.
 - **AI says Ollama is missing:** install it from ollama.com, then `ollama pull llama3.1:8b`.
 
+## Credits
+
+Planet, Moon, Sun and star maps: [Solar System Scope](https://www.solarsystemscope.com/textures/), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (based on NASA imagery). The 2k set ships in `assets/planets`; the 8k versions are downloaded once from Wikimedia Commons when High quality or the close-up over your city needs them.
+
 ## License
 
 MIT

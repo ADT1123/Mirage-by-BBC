@@ -21,7 +21,7 @@ let queue = Promise.resolve();
 
 function thumbKey(wall, cfg, night) {
   const custom = wall.custom ? JSON.stringify(cfg.wallCustom?.[wall.kind] || {}) : '';
-  return `wt2:${wall.id}:${night}:${custom}`;
+  return `wt3:${wall.id}:${night}:${custom}`;
 }
 
 // thumbnails are drawn one at a time (they share one GPU context) and kept for next time
@@ -30,6 +30,12 @@ function fillThumb(el, wall, cfg, night) {
     el.classList.add('thumb');
     el.dataset.t = wall.scene;
     el.innerHTML = '<i></i><i></i><i></i>';
+    return;
+  }
+  // Astronomy ships ready-made previews: drawing them here meant decoding a 2k map each
+  if (wall.pack === 'astro') {
+    el.style.backgroundImage = `url("${new URL(`../../../assets/thumbs/${wall.id}.jpg`, import.meta.url).href}")`;
+    el.classList.add('ready');
     return;
   }
   const key = thumbKey(wall, cfg, night);

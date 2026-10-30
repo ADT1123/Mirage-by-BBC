@@ -14,7 +14,9 @@
   --ui-fg-3: rgba(245, 245, 247, 0.4);
   --ui-accent: #0a84ff;
   --ui-fill: #ffffff;
-  --ui-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  /* no drop shadow: the popup window is only a few pixels bigger than its panel, so a soft
+     shadow gets cut off at the window edge and shows as a grey box */
+  --ui-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
   --ui-font: 'Inter Variable', system-ui, sans-serif;
   font-size: 16px; /* popups are real-size UI, not screen-scaled */
 }
@@ -29,7 +31,7 @@
   --ui-fg-2: rgba(29, 29, 31, 0.6);
   --ui-fg-3: rgba(29, 29, 31, 0.42);
   --ui-accent: #007aff;
-  --ui-shadow: 0 20px 50px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  --ui-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.14);
 }
 html[data-mode='popup'],
 html[data-mode='popup'] body,
@@ -853,6 +855,9 @@ html[data-mode='player'], html[data-mode='player'] body { background: #000; }
 .wf-fonts button small { font-size: 10px; }
 .wf-fonts button.on { box-shadow: inset 0 0 0 2px var(--ui-accent); color: var(--ui-fg); }
 .w[data-font], .w[data-font] * { font-family: var(--wf) !important; }
+/* pixel type needs its full one-pixel gap between digits to stay readable */
+.w[data-font='pixel'] { --clock-tracking: 0; }
+[data-theme='retro'] { --clock-tracking: 0; }
 .w[data-weight] :is(.clock-time, .clock-time *, .quote-text, .verse-en, .wx-temp, .cd-big, .year-pct, .note-text, .todo-text) { font-weight: var(--ww) !important; }
 
 /* tall popups (weather, settings) never run off the screen: they scroll instead */
@@ -1532,3 +1537,46 @@ body.live:not(.ctrl-held) :is([data-act='url'], [data-act='github']):hover { tex
 
 .w-menubar { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.28s ease; }
 body.mb-auto:not(.mb-show) .w-menubar { transform: translateY(-105%); opacity: 0; pointer-events: none; }
+
+/* ------------------------------------------------------------ control center: 4 quick buttons a row */
+
+.cc-quick4 { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.cc-quick4 button { padding: 9px 0 7px; gap: 5px; }
+.cc-quick4 .cc-ic { width: 30px; height: 30px; }
+.cc-quick4 small { font-size: 10.5px; white-space: nowrap; }
+.cc-go { width: 12px !important; height: 12px !important; flex: none; margin-left: auto; color: var(--ui-fg-3); }
+.cc-sl-title.off { display: none; }
+.cc-sl-title .cc-go { margin-left: 2px; }
+
+/* ------------------------------------------------------------ menu bar menus (Wi-Fi, Sound, Battery) */
+
+.mm { width: 300px; padding: 10px; display: grid; gap: 8px; }
+.mm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 2px 4px 0; }
+.mm-head b { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+.mm-head small { min-width: 0; font-size: 11.5px; color: var(--ui-fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-sub { padding: 2px 4px 0; font-size: 11px; font-weight: 600; color: var(--ui-fg-3); }
+.mm-list { display: grid; gap: 1px; padding: 4px; border-radius: 12px; background: var(--ui-tile); max-height: 300px; overflow-y: auto; scrollbar-width: none; }
+.mm .slide-row { padding: 6px 4px; }
+.mm .cc-link { box-shadow: none; }
+.mm-bat { height: 8px; margin: 0 4px; border-radius: 4px; background: var(--ui-tile-2); overflow: hidden; }
+.mm-bat i { display: block; height: 100%; border-radius: inherit; background: #30d158; transition: width 0.3s ease; }
+.mm-bat.low i { background: #ff453a; }
+
+/* menu bar: battery charge next to its icon */
+.mb-bat:empty { display: none; }
+.mb-bat small { font-size: 0.78em; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.mb-bat .batt { width: 1.55rem; height: 0.78rem; }
+
+/* ------------------------------------------------------------ update pill (top centre, until you update) */
+
+.up-pill { all: unset; position: fixed; top: 3rem; left: 50%; z-index: 40; translate: -50% 0; display: flex; align-items: center; gap: 0.6rem; max-width: min(34rem, 80vw); padding: 0.5rem 0.55rem 0.5rem 0.9rem; border-radius: 999px; font: 500 0.82rem 'Inter Variable', system-ui, sans-serif; color: #fff; background: rgba(28, 28, 32, 0.78); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0.6rem 1.6rem -0.6rem rgba(0, 0, 0, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.14); cursor: default; animation: up-in 0.5s cubic-bezier(0.2, 0.9, 0.25, 1.15); }
+.up-pill i { width: 0.5rem; height: 0.5rem; flex: none; border-radius: 50%; background: #30d158; box-shadow: 0 0 0 0.25rem rgba(48, 209, 88, 0.22); animation: up-dot 2s ease-in-out infinite; }
+.up-pill b { font-weight: 650; white-space: nowrap; }
+.up-pill span { min-width: 0; color: rgba(255, 255, 255, 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-pill em { flex: none; font-style: normal; font-weight: 650; padding: 0.3rem 0.75rem; border-radius: 999px; background: var(--accent, #0a84ff); color: #fff; transition: filter 0.15s; }
+.up-pill:hover em { filter: brightness(1.12); }
+@keyframes up-in { from { opacity: 0; translate: -50% -1.2rem; scale: 0.92; } }
+@keyframes up-dot { 50% { box-shadow: 0 0 0 0.45rem rgba(48, 209, 88, 0); } }
+[data-paused] .up-pill i { animation: none; }
+.cc-sl-title .cc-out { flex: none; }
+.cc-sl-title .cc-out span { max-width: 170px; }

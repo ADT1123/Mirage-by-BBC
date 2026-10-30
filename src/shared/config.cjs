@@ -28,6 +28,8 @@ function defaults() {
     pet: 'cat', // a little desktop pet on the dock: cat | bird | off
     menubarFixed: true, // false = the menu bar hides and slides down at the top edge
     perf: 'auto', // auto | saver | full: auto saves power on battery and on modest laptops
+    wallQuality: 'auto', // auto | low | balanced | high: how sharp the live wallpapers render
+    gpu: 'dedicated', // dedicated | integrated: which GPU draws the wallpaper on two-GPU laptops
     season: 'off', // only when you pick one: spring | summer | autumn | winter | auto (follows the calendar) | off
     ai: { model: 'llama3.1:8b' }, // local model served by Ollama
     motion: true,

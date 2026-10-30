@@ -494,7 +494,7 @@
 /* =============================== 10. RETRO =============================== */
 
 [data-theme='retro'] {
-  --font-body: 'Pixelify Sans', 'Courier New', monospace;
+  --font-body: 'Mirage Pixel', 'Pixelify Sans', 'Courier New', monospace;
   --font-display: var(--font-body);
   --font-quote: var(--font-body);
   --font-mono: var(--font-body);
@@ -528,9 +528,9 @@
 }
 [data-theme='retro'] body { font-feature-settings: normal; -webkit-font-smoothing: none; }
 [data-theme='retro'] .clock { color: #fff; }
-[data-theme='retro'] .clock-time { text-shadow: 0.06em 0.06em 0 #000; }
+[data-theme='retro'] .clock-time { text-shadow: 0.1em 0.1em 0 #000; } /* exactly one font pixel */
 [data-theme='retro'] .clock-date, [data-theme='retro'] .clock-greet { color: #fff; text-shadow: 2px 2px 0 #000; font-size: 1.4rem; }
-[data-theme='retro'] .clock-time .ampm { color: #fff; }
+[data-theme='retro'] .clock-time .ampm { color: #fff; text-shadow: 0.1em 0.1em 0 #000; }
 [data-theme='retro'] .card { padding-top: 0.35rem; }
 [data-theme='retro'] .card-head {
   margin: 0 -0.65rem 0.9rem;

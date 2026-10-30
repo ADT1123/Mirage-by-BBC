@@ -6,7 +6,7 @@ const PACKS = [
   { id: 'glass', name: 'Glass & Chrome', desc: 'Liquid glass and molten metal, lit like a studio' },
   { id: 'silk', name: 'Silk', desc: 'Satin folds that slowly breathe' },
   { id: 'land', name: 'Landscapes', desc: 'Dunes, northern lights and a live sky' },
-  { id: 'astro', name: 'Astronomy', desc: 'Earth over your city, tonight’s Moon, and Mars' },
+  { id: 'astro', name: 'Astronomy', desc: 'The Sun, every planet and tonight’s Moon, from real maps. Click a planet to zoom' },
   { id: 'clay', name: 'Clay', desc: 'Soft matte 3D shapes in pastel light' },
   { id: 'neon', name: 'Neon & Tech', desc: 'Dot matrix waves and an endless synthwave drive' },
   { id: 'color', name: 'Color', desc: 'Gradients in any colors you pick' },
@@ -47,10 +47,21 @@ const WALLS = [
   shader('land', 'aurora-crimson', 'Crimson Aurora', 'aurora', [1, 0.3, 0.35], [0.6, 0.2, 1], [0, 0, 0]),
   { id: 'live-sky', pack: 'land', name: 'Live Sky', kind: 'scene', scene: 'weather', skin: 'weather' },
 
+
   { id: 'astro-earth', pack: 'astro', name: 'Earth', kind: 'astro', body: 'earth', skin: 'astro' },
   { id: 'astro-city', pack: 'astro', name: 'Your City', kind: 'astro', body: 'city', skin: 'astro' },
   { id: 'astro-moon', pack: 'astro', name: 'Moon', kind: 'astro', body: 'moon', skin: 'astro' },
+  { id: 'astro-sun', pack: 'astro', name: 'Sun', kind: 'astro', body: 'sun', skin: 'astro' },
+  { id: 'astro-mercury', pack: 'astro', name: 'Mercury', kind: 'astro', body: 'mercury', skin: 'astro' },
+  { id: 'astro-venus', pack: 'astro', name: 'Venus', kind: 'astro', body: 'venus', skin: 'astro' },
   { id: 'astro-mars', pack: 'astro', name: 'Mars', kind: 'astro', body: 'mars', skin: 'astro' },
+  { id: 'astro-jupiter', pack: 'astro', name: 'Jupiter', kind: 'astro', body: 'jupiter', skin: 'astro' },
+  { id: 'astro-saturn', pack: 'astro', name: 'Saturn', kind: 'astro', body: 'saturn', skin: 'astro' },
+  { id: 'astro-uranus', pack: 'astro', name: 'Uranus', kind: 'astro', body: 'uranus', skin: 'astro' },
+  { id: 'astro-neptune', pack: 'astro', name: 'Neptune', kind: 'astro', body: 'neptune', skin: 'astro' },
+  shader('astro', 'astro-galaxy', 'Spiral Galaxy', 'galaxy', [0.35, 0.55, 1], [1, 0.35, 0.6], [1, 0.8, 0.55], { skin: 'astro' }),
+  shader('astro', 'astro-galaxy-teal', 'Teal Galaxy', 'galaxy', [0.3, 0.8, 0.95], [1, 0.4, 0.3], [1, 0.72, 0.4], { skin: 'astro' }),
+
 
   shader('clay', 'clay-peach', 'Peach', 'clay', [0.95, 0.86, 0.8], [0.96, 0.45, 0.38], [0.55, 0.5, 0.95]),
   shader('clay', 'clay-mint', 'Mint', 'clay', [0.84, 0.92, 0.88], [0.25, 0.65, 0.55], [0.98, 0.78, 0.35]),
@@ -60,6 +71,9 @@ const WALLS = [
   shader('clay', 'clay-ocean', 'Ocean', 'clay', [0.82, 0.9, 0.96], [0.15, 0.45, 0.85], [0.4, 0.85, 0.9]),
   shader('clay', 'clay-sand', 'Sand', 'clay', [0.92, 0.88, 0.8], [0.78, 0.6, 0.42], [0.4, 0.48, 0.4]),
   shader('clay', 'clay-graphite', 'Graphite', 'clay', [0.2, 0.2, 0.22], [0.92, 0.92, 0.9], [0.95, 0.35, 0.25]),
+  shader('clay', 'lava-peach', 'Lava Lamp', 'lava', [1, 0.45, 0.3], [0.99, 0.86, 0.74], [1, 0.3, 0.45]),
+  shader('clay', 'lava-retro', 'Retro Lava', 'lava', [1, 0.45, 0.1], [0.42, 0.07, 0.22], [1, 0.75, 0.2]),
+  shader('clay', 'lava-mint', 'Mint Lava', 'lava', [0.3, 0.75, 0.65], [0.93, 0.95, 0.9], [0.98, 0.75, 0.4]),
 
   shader('neon', 'dots-mono', 'Dot Field', 'dots', [0.95, 0.95, 0.95], [1, 0.1, 0.08], [0, 0, 0], { skin: 'midnight' }),
   shader('neon', 'dots-amber', 'Amber Dots', 'dots', [1, 0.72, 0.3], [1, 0.25, 0.1], [0, 0, 0]),

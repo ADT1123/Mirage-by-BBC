@@ -439,8 +439,11 @@ const menubar = {
       <div class="mb-right">
         ${ctx.store.update?.available ? '<span class="mb-item mb-update" data-act="update" title="A new version is ready">Update</span>' : ''}
         <span class="mb-item mb-np" data-act="player" data-k="np"></span>
+        <span class="mb-item mb-bat" data-act="battery" data-k="bat" title="Battery"></span>
+        <span class="mb-item" data-act="sound" title="Sound">${icon('volume')}</span>
+        <span class="mb-item mb-wifi" data-act="wifi" data-k="wifi" title="Wi-Fi"></span>
         <span class="mb-item" data-act="spotlight" title="Search">${icon('search')}</span>
-        <span class="mb-item mb-status mb-wifi" data-act="control" data-k="status" title="Control Center"></span>
+        <span class="mb-item" data-act="control" title="Control Center">${icon('toggles')}</span>
         <span class="mb-item" data-act="calendar" data-k="when"></span>
       </div>
     </div>`,
@@ -449,9 +452,10 @@ const menubar = {
     const date = now.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
     const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: !ctx.cfg.clock24 });
     set(el, 'when', `${date}  ${time}`);
-    // one quiet status cluster (opens Control Center): Wi-Fi, then battery when there is one
+    // Wi-Fi, and the battery with its charge when there is one (each opens its own menu)
     const b = ctx.store.battery;
-    set(el, 'status', `${navigator.onLine ? icon('wifi') : '<span class="mb-off">offline</span>'}${b ? batteryIcon(b.level, b.charging || b.plugged) : ''}`, true);
+    set(el, 'wifi', navigator.onLine ? icon('wifi') : '<span class="mb-off">offline</span>', true);
+    set(el, 'bat', b ? `<small>${Math.round(b.level * 100)}%</small>${batteryIcon(b.level, b.charging || b.plugged)}` : '', true);
     // music: a small moving equalizer while something plays; the song name is on hover
     const mm = ctx.store.media;
     const np = el.querySelector('[data-k="np"]');

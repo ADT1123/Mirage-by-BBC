@@ -34,6 +34,11 @@ const ICON = path.join(ROOT, 'assets', 'tray.png');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 if (process.env.WALL_NO_GPU === '1') app.disableHardwareAcceleration();
+// Laptops with two GPUs (Intel + NVIDIA/AMD): Chromium takes the power-saving one unless it is
+// asked at startup. Settings > Graphics picks; changing it restarts Mirage.
+try {
+  if ((config.load().gpu ?? 'dedicated') === 'dedicated') app.commandLine.appendSwitch('force_high_performance_gpu');
+} catch {}
 // Linux: run through X11/XWayland (GNOME and KDE honor the "desktop" window type there,
 // including on Wayland sessions like Ubuntu 26.04), with see-through popups.
 if (process.platform === 'linux') {

@@ -45,7 +45,7 @@ export const FONTS = {
   serif: { label: 'Serif', family: "'Instrument Serif', Georgia, serif" },
   mono: { label: 'Mono', family: "'JetBrains Mono Variable', monospace", weights: [100, 800] },
   heritage: { label: 'Heritage', family: "'Tiro Devanagari Sanskrit', serif" },
-  pixel: { label: 'Pixel', family: "'Pixelify Sans', monospace" },
+  pixel: { label: 'Pixel', family: "'Mirage Pixel', 'Pixelify Sans', monospace" },
   comic: { label: 'Comic', family: "'Bangers', cursive" },
 };
 const NO_FONT = new Set(['menubar', 'dock', 'stack', 'music', 'commits', 'art', 'photo', 'memories']);

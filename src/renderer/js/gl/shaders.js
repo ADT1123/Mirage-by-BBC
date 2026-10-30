@@ -7,6 +7,10 @@ export const COMMON = `
 precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform vec2 uMouse; uniform float uNight;
 uniform vec3 uA; uniform vec3 uB; uniform vec3 uC;
+// uQ: quality (0 low, 1 balanced, 2 high). uEnv: real sun height (-1..1, 0 = horizon), time of
+// day (0..1 from midnight), rain (0..1), snow (0..1). uTap: last click (xy in the same units as
+// p = (fc - 0.5*uRes)/uRes.y, z = seconds since it).
+uniform float uQ; uniform vec4 uEnv; uniform vec4 uTap;
 #define PI 3.14159265
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
 float noise(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); vec2 u = f*f*(3.0 - 2.0*f);
@@ -486,126 +490,7 @@ void main(){
 }
 `;
 
-// Astronomy: Earth (land from Natural Earth in uTex, lit by the real Sun), the Moon (real
-// phase) and Mars. Positions are "earth-fixed": (cos lat sin lon, sin lat, cos lat cos lon).
-const PLANET = `
-uniform sampler2D uTex; uniform mat3 uRot; uniform vec3 uSun; uniform vec4 uFrame; uniform vec3 uLoc; uniform vec3 uLight; uniform float uMark;
-float hash3(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
-float noise3(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f*f*(3.0 - 2.0*f);
-  return mix(mix(mix(hash3(i), hash3(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 0.0)), hash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
-             mix(mix(hash3(i + vec3(0.0, 0.0, 1.0)), hash3(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash3(i + vec3(0.0, 1.0, 1.0)), hash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z); }
-float fbm3d(vec3 p){ float v = 0.0; float a = 0.5; for(int i = 0; i < 5; i++){ v += a*noise3(p); p = p*2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return v; }
-float craters(vec3 p, float n){
-  float h = 0.0;
-  for(int o = 0; o < 3; o++){
-    float s = n*pow(2.3, float(o));
-    vec3 q = p*s; vec3 b = floor(q - 0.5);
-    for(int k = 0; k < 8; k++){
-      vec3 g = vec3(mod(float(k), 2.0), mod(floor(float(k)/2.0), 2.0), floor(float(k)/4.0));
-      vec3 c = b + g;
-      // few big craters, rarer small ones: a cratered surface, not foam
-      float r0 = hash3(c + 17.0);
-      if(r0 < 0.62 + 0.13*float(o)) continue;
-      vec3 ctr = c + 0.5 + (vec3(hash3(c), hash3(c + 5.3), hash3(c + 9.1)) - 0.5)*0.6;
-      float rad = 0.12 + 0.32*pow(hash3(c + 2.7), 2.0);
-      float d = length(q - ctr)/rad;
-      if(d < 1.4) h += ((d < 1.0 ? (d*d - 1.0)*0.45 : 0.0) + exp(-pow((d - 1.0)*6.0, 2.0))*0.12)*rad/s;
-    }
-  }
-  return h;
-}
-vec3 starfield(vec2 uv){
-  vec2 s = uv*180.0; vec2 c = floor(s); float h = hash(c);
-  vec2 f = fract(s) - 0.5 - (vec2(hash(c + 3.1), hash(c + 7.7)) - 0.5)*0.6;
-  float st = step(0.986, h)*smoothstep(0.14, 0.0, length(f))*(0.35 + 0.65*hash(c + 1.9));
-  float band = exp(-pow(uv.y*1.4 - uv.x*0.5 - 0.1, 2.0)*6.0)*fbm(uv*3.0)*0.05;
-  return vec3(st) + vec3(0.6, 0.65, 0.9)*band;
-}
-void main(){
-  vec2 fc = gl_FragCoord.xy;
-  vec2 uv = (fc - 0.5*uRes)/uRes.y + uMouse*0.008;
-  float body = uFrame.w;
-  vec2 q = (uv - uFrame.xy)/uFrame.z;
-  float r2 = dot(q, q); float r = sqrt(r2);
-  vec3 col = starfield(uv + uMouse*0.004)*0.9;
-  vec3 Lv = body < 0.5 ? uSun*uRot : uLight;
-  if(body < 0.5 && r > 1.0){
-    float day = clamp(dot(normalize(vec3(q, 0.0)), Lv)*0.8 + 0.35, 0.0, 1.0);
-    col += vec3(0.25, 0.55, 1.0)*exp(-(r - 1.0)*uFrame.z*60.0)*0.7*day;
-  }
-  if(r2 < 1.0){
-    vec3 n = vec3(q, sqrt(1.0 - r2));
-    vec3 e = uRot*n;
-    if(body < 0.5){
-      float lat = asin(clamp(e.y, -1.0, 1.0)); float lon = atan(e.x, e.z);
-      vec4 tx = texture2D(uTex, vec2(lon/(2.0*PI) + 0.5, 0.5 - lat/PI));
-      float land = tx.r; float lights = tx.g; float shelf = tx.b;
-      float alat = abs(lat)*57.2958;
-      float nz = fbm3d(e*7.0); float nz2 = noise3(e*40.0);
-      vec3 green = mix(vec3(0.05, 0.10, 0.035), vec3(0.15, 0.19, 0.07), nz);
-      vec3 dry = mix(vec3(0.40, 0.31, 0.17), vec3(0.62, 0.50, 0.32), nz2);
-      float desert = smoothstep(12.0, 20.0, alat)*(1.0 - smoothstep(33.0, 43.0, alat))*smoothstep(0.38, 0.62, nz);
-      vec3 landc = mix(green, dry, desert);
-      landc = mix(landc, vec3(0.06, 0.09, 0.06), smoothstep(50.0, 62.0, alat));
-      float ice = clamp(smoothstep(66.0, 76.0, alat) + step(lat, -1.05), 0.0, 1.0);
-      landc = mix(landc, vec3(0.80, 0.84, 0.88), ice);
-      vec3 ocean = mix(vec3(0.004, 0.02, 0.065), vec3(0.02, 0.11, 0.2), shelf);
-      ocean = mix(ocean, vec3(0.7, 0.78, 0.85), smoothstep(74.0, 82.0, alat));
-      vec3 surf = mix(ocean, landc, land);
-      // clouds: domain-warped noise, busiest near the equator and the stormy mid-latitudes
-      vec3 drift = vec3(uTime*0.004, 0.0, uTime*0.002);
-      vec3 cw = e*2.2 + drift + 0.45*vec3(fbm3d(e*2.6 + 1.0), fbm3d(e*2.6 + 7.0), fbm3d(e*2.6 + 3.0));
-      float belt = 0.06*cos(lat*4.0) + 0.04*cos(lat*2.0);
-      float cl = smoothstep(0.5, 0.66, fbm3d(cw*1.7) + 0.14*(fbm3d(e*16.0 + drift*3.0) - 0.5) + belt)*0.92;
-      float sl = dot(e, uSun);
-      float dif = max(sl, 0.0);
-      float tw = exp(-pow(sl/0.1, 2.0));
-      vec3 dayc = mix(surf, vec3(0.92, 0.93, 0.95), cl)*(0.015 + 1.3*dif);
-      dayc *= mix(vec3(1.0), vec3(1.25, 0.72, 0.48), tw*0.55);
-      float spec = pow(max(reflect(-Lv, n).z, 0.0), 140.0)*(1.0 - land)*(1.0 - cl)*dif;
-      dayc += vec3(1.0, 0.9, 0.75)*spec*0.45;
-      float night = 1.0 - smoothstep(-0.14, 0.04, sl);
-      vec3 city = vec3(1.0, 0.66, 0.32)*pow(lights, 1.3)*night*(1.0 - cl*0.75)*1.7;
-      col = dayc + city + surf*0.035*night;
-      col += vec3(0.25, 0.5, 1.0)*pow(1.0 - n.z, 2.5)*clamp(dot(n, Lv) + 0.35, 0.0, 1.0)*0.9;
-      float d = acos(clamp(dot(e, uLoc), -1.0, 1.0));
-      float pulse = 0.5 + 0.5*sin(uTime*2.4);
-      float ringR = uMark*(1.0 + pulse*0.8);
-      col = mix(col, vec3(1.0), smoothstep(uMark*0.5, uMark*0.25, d));
-      col += vec3(1.0)*smoothstep(uMark*0.22, 0.0, abs(d - ringR))*(1.0 - pulse)*0.8;
-    } else {
-      vec3 p = e;
-      float h = craters(p, body < 1.5 ? 5.0 : 3.5);
-      vec3 t1 = normalize(cross(p, vec3(0.0, 1.0, 0.0) + 0.001)); vec3 t2 = cross(p, t1);
-      float ee = 0.004;
-      float hx = craters(normalize(p + t1*ee), body < 1.5 ? 5.0 : 3.5) - h;
-      float hy = craters(normalize(p + t2*ee), body < 1.5 ? 5.0 : 3.5) - h;
-      vec3 en = normalize(p - (t1*hx + t2*hy)/ee*(body < 1.5 ? 2.2 : 1.2));
-      vec3 nn = en*uRot;
-      float big = fbm3d(p*1.6); float fine = fbm3d(p*9.0); float mid = fbm3d(p*4.0 + 2.0);
-      vec3 alb;
-      if(body < 1.5){
-        // bright highlands, dark basalt seas (maria), and fine regolith grain
-        alb = mix(vec3(0.66, 0.65, 0.62), vec3(0.24, 0.24, 0.26), smoothstep(0.5, 0.4, big + (mid - 0.5)*0.15));
-        alb *= 0.82 + 0.28*fine + 0.12*(mid - 0.5);
-      } else {
-        // rust plains, dark volcanic regions, dusty bright basins and polar ice
-        float darkr = smoothstep(0.56, 0.4, big + (mid - 0.5)*0.35);
-        alb = mix(vec3(0.76, 0.40, 0.20), vec3(0.30, 0.14, 0.08), darkr*0.85);
-        alb = mix(alb, vec3(0.86, 0.58, 0.38), smoothstep(0.6, 0.78, mid)*0.45);
-        alb *= 0.9 + 0.2*fine;
-        alb = mix(alb, vec3(0.95, 0.93, 0.92), smoothstep(0.86, 0.93, abs(p.y))*(0.7 + 0.3*fine));
-      }
-      float dif = max(dot(nn, uLight), 0.0);
-      col = alb*(dif*1.55 + (body < 1.5 ? 0.012 : 0.0));
-      if(body > 1.5) col += vec3(0.9, 0.5, 0.35)*pow(1.0 - n.z, 3.0)*clamp(dot(n, uLight) + 0.3, 0.0, 1.0)*0.35;
-    }
-  }
-  gl_FragColor = vec4(finish(col*1.1, fc), 1.0);
-}
-`;
-
-export const SHADERS = { silk: SILK, glass: GLASS, chrome: CHROME, dunes: DUNES, aurora: AURORA, clay: CLAY, dots: DOTS, neon: NEON, gradient: GRADIENT, planet: PLANET };
+export const SHADERS = { silk: SILK, glass: GLASS, chrome: CHROME, dunes: DUNES, aurora: AURORA, clay: CLAY, dots: DOTS, neon: NEON, gradient: GRADIENT };
 
 // share of device pixels each scene renders at (the engine adapts it to the GPU)
-export const RES = { silk: 0.75, glass: 0.55, chrome: 0.55, dunes: 0.45, aurora: 0.55, clay: 0.65, dots: 0.7, neon: 0.55, gradient: 0.5, planet: 0.75 };
+export const RES = { silk: 0.75, glass: 0.55, chrome: 0.55, dunes: 0.45, aurora: 0.55, clay: 0.65, dots: 0.7, neon: 0.55, gradient: 0.5 };

@@ -63,6 +63,11 @@ export function enableLive(app) {
       case 'control':
       case 'calendar':
         return window.wall.popup(act, { y: Math.round(r.bottom + 6) });
+      // menu bar menus open right under their icon (the window is 324px: a 300px panel + padding)
+      case 'wifi':
+      case 'sound':
+      case 'battery':
+        return window.wall.popup(act, { x: Math.round(r.right + 12 - 324), y: Math.round(r.bottom + 6) });
       case 'projects':
         return window.wall.popup('projects', { x: Math.max(6, Math.round(r.x - 10)), y: Math.round(r.bottom + 6), at: 'left' });
       case 'menu':

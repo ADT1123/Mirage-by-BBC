@@ -1,4 +1,4 @@
-// Updates for people who cloned the repo: every few hours we ask git whether the GitHub
+// Updates for people who cloned the repo: every few minutes we ask git whether the GitHub
 // branch has new commits. If so, the wallpaper shows "Update available"; one click pulls,
 // reinstalls dependencies when they changed, and restarts.
 
@@ -7,7 +7,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..');
-const EVERY = 3 * 60 * 60 * 1000;
+const EVERY = 5 * 60 * 1000; // a git fetch is tiny; new versions show up within 5 minutes
 
 let status = { available: false, behind: 0, changes: [], checked: 0, error: null };
 let listeners = [];
@@ -63,7 +63,7 @@ async function apply() {
 }
 
 function start() {
-  setTimeout(check, 2 * 60 * 1000); // shortly after startup, then every few hours
+  setTimeout(check, 45 * 1000); // shortly after startup, then every 5 minutes
   setInterval(check, EVERY).unref?.();
 }
 
