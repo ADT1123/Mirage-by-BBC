@@ -33,9 +33,9 @@ async function check() {
   if (!fetched.ok) return (status = { ...status, error: 'offline', checked: Date.now() });
   const behind = Number((await git(['rev-list', '--count', 'HEAD..@{u}'])).out) || 0;
   const log = behind ? (await git(['log', '--format=%s', '-n', '8', 'HEAD..@{u}'])).out.split('\n').filter(Boolean) : [];
-  const was = status.available;
+  const was = status.behind;
   status = { available: behind > 0, behind, changes: log, checked: Date.now(), error: null };
-  if (status.available && !was) for (const fn of listeners) fn(status);
+  if (behind > was) for (const fn of listeners) fn(status); // every new push, not just the first
   return status;
 }
 
@@ -45,8 +45,10 @@ async function apply() {
   busy = true;
   try {
     if (!isRepo()) return { ok: false, reason: 'This copy was not cloned with git, so it cannot update itself' };
-    const dirty = (await git(['status', '--porcelain', '--untracked-files=no'])).out;
-    if (dirty) return { ok: false, reason: 'You have changed files in this folder. Commit or undo them first, then update' };
+    // npm install often rewrites package-lock.json; that alone shouldn't block an update
+    const files = (await git(['diff', '--name-only', 'HEAD'])).out.split('\n').filter(Boolean);
+    if (files.includes('package-lock.json')) await git(['checkout', 'HEAD', '--', 'package-lock.json']);
+    if (files.some((f) => f !== 'package-lock.json')) return { ok: false, reason: 'You have changed files in this folder. Commit or undo them first, then update' };
     const before = (await git(['rev-parse', 'HEAD'])).out;
     const pulled = await git(['pull', '--ff-only', '--quiet'], 120000);
     if (!pulled.ok) return { ok: false, reason: 'Could not download the update. Check your internet connection' };
@@ -65,6 +67,8 @@ async function apply() {
 function start() {
   setTimeout(check, 45 * 1000); // shortly after startup, then every 5 minutes
   setInterval(check, EVERY).unref?.();
+  // a laptop that slept through a push hears about it as soon as it wakes
+  require('electron').powerMonitor.on('resume', () => setTimeout(check, 15 * 1000));
 }
 
 module.exports = { start, check, apply, status: () => status, onAvailable: (fn) => listeners.push(fn) };

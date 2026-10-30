@@ -146,9 +146,8 @@ function updatePill(s) {
     pill.addEventListener('click', () => window.wall.action('update'));
     document.body.append(pill);
   }
-  const what = s.changes?.[0] ? `<span>${esc(s.changes[0])}</span>` : '';
-  pill.innerHTML = `<i></i><b>Update available</b>${what}<em>Install</em>`;
-  pill.title = s.behind > 1 ? `${s.behind} new changes` : 'A new version is ready';
+  pill.innerHTML = '<i></i><b>New update</b><em>Install</em>';
+  pill.title = s.changes?.length ? `What's new:\n${s.changes.join('\n')}` : 'A new version is ready';
 }
 
 // your own accent for the whole theme (Settings), including the commit graph.

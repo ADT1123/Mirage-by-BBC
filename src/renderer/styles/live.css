@@ -1570,11 +1570,10 @@ body.mb-auto:not(.mb-show) .w-menubar { transform: translateY(-105%); opacity: 0
 
 /* ------------------------------------------------------------ update pill (top centre, until you update) */
 
-.up-pill { all: unset; position: fixed; top: 3rem; left: 50%; z-index: 40; translate: -50% 0; display: flex; align-items: center; gap: 0.6rem; max-width: min(34rem, 80vw); padding: 0.5rem 0.55rem 0.5rem 0.9rem; border-radius: 999px; font: 500 0.82rem 'Inter Variable', system-ui, sans-serif; color: #fff; background: rgba(28, 28, 32, 0.78); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0.6rem 1.6rem -0.6rem rgba(0, 0, 0, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.14); cursor: default; animation: up-in 0.5s cubic-bezier(0.2, 0.9, 0.25, 1.15); }
+.up-pill { all: unset; position: fixed; top: 3rem; left: 50%; z-index: 40; translate: -50% 0; display: flex; align-items: center; gap: 0.55rem; padding: 0.32rem 0.32rem 0.32rem 0.75rem; border-radius: 999px; font: 500 0.82rem 'Inter Variable', system-ui, sans-serif; color: #fff; background: rgba(28, 28, 32, 0.78); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0.6rem 1.6rem -0.6rem rgba(0, 0, 0, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.14); cursor: default; animation: up-in 0.5s cubic-bezier(0.2, 0.9, 0.25, 1.15); }
 .up-pill i { width: 0.5rem; height: 0.5rem; flex: none; border-radius: 50%; background: #30d158; box-shadow: 0 0 0 0.25rem rgba(48, 209, 88, 0.22); animation: up-dot 2s ease-in-out infinite; }
 .up-pill b { font-weight: 650; white-space: nowrap; }
-.up-pill span { min-width: 0; color: rgba(255, 255, 255, 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.up-pill em { flex: none; font-style: normal; font-weight: 650; padding: 0.3rem 0.75rem; border-radius: 999px; background: var(--accent, #0a84ff); color: #fff; transition: filter 0.15s; }
+.up-pill em { flex: none; font-style: normal; font-weight: 650; padding: 0.24rem 0.65rem; border-radius: 999px; background: var(--accent, #0a84ff); color: #fff; transition: filter 0.15s; }
 .up-pill:hover em { filter: brightness(1.12); }
 @keyframes up-in { from { opacity: 0; translate: -50% -1.2rem; scale: 0.92; } }
 @keyframes up-dot { 50% { box-shadow: 0 0 0 0.45rem rgba(48, 209, 88, 0); } }
