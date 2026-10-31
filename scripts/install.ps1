@@ -210,7 +210,7 @@ function Install-Mirage {
     Push-Location $Dir
     try {
         Write-Step 'Installing the parts Mirage needs (npm install)'
-        Write-Note 'This downloads Electron and the rest. The first time it takes a few minutes.'
+        Write-Note 'The first time this takes a few minutes.'
         & $Npm install
         Stop-IfFailed @(
             'npm install failed.',
@@ -220,6 +220,21 @@ function Install-Mirage {
             '',
             "You can retry it yourself:  cd $Dir   then  npm install"
         )
+
+        # Electron stopped fetching its own binary during npm install, so the first thing that
+        # asks for it downloads ~100 MB. Do it here, with progress, not on the first start.
+        Write-Step 'Downloading Electron (about 100 MB)'
+        Write-Note 'This is the browser engine Mirage draws with. It only happens once.'
+        & node -e "require('electron')"
+        Stop-IfFailed @(
+            'The Electron download failed.',
+            '',
+            'Check your internet connection, then run this again:',
+            "  cd $Dir   then  node -e ""require('electron')""",
+            '',
+            'Behind a proxy, set HTTP_PROXY and HTTPS_PROXY first.'
+        )
+        Write-Note 'Electron is ready.'
 
         # ----------------------------------------------- the bro command ----
 

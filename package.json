@@ -1,6 +1,6 @@
 {
   "name": "mirage",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Mirage: a live, usable desktop wallpaper with widgets, 17 themes, Spotlight, a local AI and a CLI.",
   "main": "src/main/main.cjs",
   "bin": {

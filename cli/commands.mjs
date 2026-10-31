@@ -188,7 +188,9 @@ export const COMMANDS = [
       const key = (st) => showKey(st?.hotkey || config.load().hotkey || DEFAULT_KEYS.hotkey);
       if (r.already) return ok('Already on your desktop', [`${r.status.displays} display(s) · press ${key(r.status)} (or /edit) to rearrange`]);
       if (r.started) return ok(`${brand.name} is live on your desktop`, [`Press ${key(r.status)} (or /edit) to drag things around`, 'Look for the tray icon to switch wallpapers or quit']);
-      return fail('It did not start in time', [`Check the log with /log, or open ${r.log}`]);
+      // show the reason here: a blank "it didn't start" means a trip to a log file nobody finds
+      if (r.reason) return fail('It could not start', [r.reason, `Full log: ${r.log}`]);
+      return fail('It did not start in time', [...(r.tail?.length ? ['The end of the log:', ...r.tail] : []), `Full log: ${r.log}`]);
     },
   },
   {

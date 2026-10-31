@@ -186,6 +186,13 @@ function linkedBinary(electronBin) {
     if (have && have.ino === real.ino && have.dev === real.dev) return target;
     if (have) fs.rmSync(target, { force: true });
     fs.linkSync(electronBin, target);
+    // This is only a nicer name, so it must never be the reason Mirage won't start: prove the
+    // link actually runs before handing it back. Once per Electron version, about a second.
+    const { status } = require('child_process').spawnSync(target, ['--version'], { timeout: 20000, stdio: 'ignore' });
+    if (status !== 0) {
+      fs.rmSync(target, { force: true });
+      return electronBin;
+    }
     return target;
   } catch {
     return electronBin;

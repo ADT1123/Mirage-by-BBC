@@ -229,6 +229,21 @@ if ! npm install; then
       "You can retry it yourself:  cd $DIR  &&  npm install"
 fi
 
+# Electron stopped fetching its own binary during npm install, so the first thing that asks for
+# it downloads ~100 MB. Do it here, with progress, instead of during the first start.
+step "Downloading Electron (about 100 MB)"
+note "This is the browser engine Mirage draws with. It only happens once."
+
+if ! node -e "require('electron')"; then
+  die "The Electron download failed." \
+      "" \
+      "Check your internet connection, then run this again:" \
+      "  cd $DIR  &&  node -e \"require('electron')\"" \
+      "" \
+      "Behind a proxy, set http_proxy and https_proxy first."
+fi
+note "Electron is ready."
+
 # ----------------------------------------------------------- bro command ----
 
 step "Turning on the  bro  command (npm link)"

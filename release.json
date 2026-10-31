@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "1.2.1",
+      "date": "2026-10-31",
+      "title": "Fixes the first start on Linux",
+      "notes": [
+        "Electron is downloaded during install, not on the first start",
+        "A start that fails now prints why, instead of just pointing at a log file"
+      ]
+    },
+    {
       "version": "1.2.0",
       "date": "2026-10-31",
       "title": "First-run setup, shareable setups and a lighter touch on battery",
