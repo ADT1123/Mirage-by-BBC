@@ -11,6 +11,7 @@ import brand from '../src/shared/brand.cjs';
 import themes from '../src/shared/themes.cjs';
 import packs from '../src/shared/packs.cjs';
 import widgets from '../src/shared/widgets.cjs';
+import share from '../src/shared/share.cjs';
 import * as control from './control.mjs';
 import { lookup, closest, norm } from './fuzzy.mjs';
 import { version } from './mark.mjs';
@@ -174,7 +175,7 @@ function settingsList() {
 
 // ------------------------------------------------------------------ the commands
 
-export const GROUP_ORDER = ['Start & stop', 'Wallpapers & packs', 'Widgets', 'Settings', 'Extras', 'Updates', 'Troubleshooting'];
+export const GROUP_ORDER = ['Start & stop', 'Wallpapers & packs', 'Widgets', 'Settings', 'Share setups', 'Extras', 'Updates', 'Troubleshooting'];
 
 export const COMMANDS = [
   // ---------------------------------------------------------------- start & stop
@@ -871,6 +872,90 @@ export const COMMANDS = [
     },
   },
 
+  // ---------------------------------------------------------------- share setups
+  {
+    name: 'export',
+    aliases: ['share'],
+    args: '[--show] [--file <path>]',
+    group: 'Share setups',
+    desc: 'Pack your whole look into one code you can send a friend',
+    example: 'export --show',
+    complete: () => [
+      { value: '--show', desc: 'print the exact JSON that would be shared' },
+      { value: '--file', desc: 'write it to a .json file instead' },
+    ],
+    async run(words) {
+      const show = words.includes('--show') || words.includes('-s');
+      const at = words.findIndex((w) => w === '--file' || w === '-f');
+      const where = at >= 0 ? words.slice(at + 1).filter((w) => !w.startsWith('-')).join(' ').trim().replace(/^["']|["']$/g, '') : '';
+      if (at >= 0 && !where) return fail('Which file should I write?', ['Example: /export --file my-setup.json']);
+      const payload = share.buildPayload(config.load());
+      const code = share.encode(payload);
+      const never = ['Never shared:', ...share.STRIPPED.map((s) => `  · ${s}`)];
+      if (show) return ok('Exactly what would be shared', [...share.readable(payload).split('\n'), '', ...never], { hint: 'Happy with it? /export gives you the code' });
+      if (where) {
+        const abs = path.resolve(where.endsWith('.json') ? where : `${where}.json`);
+        try {
+          fs.mkdirSync(path.dirname(abs), { recursive: true });
+          fs.writeFileSync(abs, `${share.readable(payload)}\n`);
+        } catch (e) {
+          return fail('Could not write that file', [abs, String(e.message || e)]);
+        }
+        return ok('Your setup is in a file', [abs, ...share.summary(payload), '', ...never], { hint: `Send it over — your friend runs /import ${path.basename(abs)}` });
+      }
+      return ok('Your setup, in one code', [code, '', ...share.summary(payload)], { hint: `Send this to a friend: they run /import <code> and their desktop looks like yours. See it first with /export --show` });
+    },
+  },
+  {
+    name: 'import',
+    aliases: ['setup'],
+    args: '<code | file> [--look-only | --widgets-only]',
+    group: 'Share setups',
+    desc: 'Wear a setup someone shared (your notes and details stay yours)',
+    example: `import ${share.PREFIX}eJyrVgrLz1ey…`,
+    complete: () => [
+      { value: '--look-only', desc: 'wallpaper and style, keep your widgets' },
+      { value: '--widgets-only', desc: 'the widget layout, keep your wallpaper' },
+    ],
+    async run(words) {
+      const flags = words.filter((w) => w.startsWith('-'));
+      const odd = flags.find((f) => !['--look-only', '--look', '--widgets-only', '--widgets'].includes(f));
+      if (odd) return fail(`Unknown option "${odd}"`, ['Use --look-only (wallpaper and style) or --widgets-only (the layout)']);
+      const lookOnly = flags.some((f) => f.startsWith('--look'));
+      const widgetsOnly = flags.some((f) => f.startsWith('--widgets'));
+      if (lookOnly && widgetsOnly) return fail('Pick one', ['--look-only or --widgets-only, not both']);
+      const arg = words.filter((w) => !w.startsWith('-')).join(' ').trim().replace(/^["']|["']$/g, '');
+      if (!arg) return fail('Paste the code, or point me at the file', [`Example: /import ${share.PREFIX}eJyrVgrLz1ey…`, 'Or: /import my-setup.json', 'Make your own with /export']);
+
+      const looksLikeCode = arg.toUpperCase().startsWith(share.PREFIX);
+      const abs = path.resolve(arg);
+      let isFile = false;
+      try {
+        isFile = !looksLikeCode && fs.statSync(abs).isFile();
+      } catch {}
+      let r;
+      if (isFile) {
+        if (fs.statSync(abs).size > 1024 * 1024) return fail('That file is far too big to be a setup', [abs, 'A shared setup is a few kilobytes at most']);
+        try {
+          r = share.parseText(fs.readFileSync(abs, 'utf8'));
+        } catch (e) {
+          return fail('Could not read that file', [abs, String(e.message || e)]);
+        }
+      } else if (!looksLikeCode && /[\\/]|\.json$/i.test(arg)) {
+        return fail('No file there', [abs, 'Give the path to a .json a friend sent you, or paste their code']);
+      } else {
+        r = share.decode(arg);
+      }
+      if (!r.ok) return fail(r.error, [...r.lines, ...(isFile ? [abs] : [])], { hint: 'Nothing was changed' });
+
+      const all = share.summary(r.payload);
+      const preview = widgetsOnly ? all.slice(2) : lookOnly ? all.slice(0, 2) : all;
+      const extra = await change((c) => (share.apply(c, r.payload, { lookOnly, widgetsOnly }), c));
+      const kept = widgetsOnly ? 'Your wallpaper and style stayed as they were.' : 'Your name, city, GitHub, dock, notes and to-dos are untouched.';
+      return ok(lookOnly ? 'Their look is on' : widgetsOnly ? 'Their layout is on' : 'Setup imported', [...preview, '', kept], extra);
+    },
+  },
+
   // ---------------------------------------------------------------- extras
   {
     name: 'player',
@@ -935,14 +1020,14 @@ export const COMMANDS = [
     name: 'taskbar',
     args: 'hide | show',
     group: 'Extras',
-    desc: 'Auto-hide the Windows taskbar so the dock takes over',
+    desc: 'Auto-hide the system taskbar (Ubuntu: the dock) so your own dock takes over',
     complete: () => [{ value: 'hide', desc: 'auto-hide' }, { value: 'show', desc: 'always show' }],
     async run([v]) {
       if (v !== 'hide' && v !== 'show') return fail('Use /taskbar hide or /taskbar show');
       const s = await control.status();
       if (!s) return fail(`${brand.name} is not running`, ['Run /start first']);
       await control.call(`/taskbar-${v}`);
-      return ok(v === 'hide' ? 'Windows taskbar auto-hides now' : 'Windows taskbar is always visible', v === 'hide' ? ['Move the mouse to the bottom edge to bring it back'] : []);
+      return ok(v === 'hide' ? 'The taskbar auto-hides now' : 'The taskbar is always visible', v === 'hide' ? ['Move the mouse to the bottom edge to bring it back'] : []);
     },
   },
   {

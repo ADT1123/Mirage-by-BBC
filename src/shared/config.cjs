@@ -36,6 +36,7 @@ function defaults() {
     motion: true,
     background: null, // absolute path to an image, or null for the theme scene
     dim: 0.25, // darkening over a custom background image
+    bgMotion: true, // a photo background drifts slowly and tilts a little under the cursor
     city: null, // { name, country, lat, lon }
     repos: { roots: [], extra: [] },
     github: null, // GitHub username for the contribution graph; null = auto-detect, 'off' = local git only

@@ -1,11 +1,39 @@
 {
-  "version": "1.1.0",
-  "title": "New Liquid wallpapers and smoother performance",
-  "notes": [
-    "Liquid pack: Koi Pond, Ink in Water, Chrome Blobs and Soap Bubble",
-    "Earthrise: the real Earth seen from the Moon",
-    "Wallpaper blur in Control Center",
-    "Lower CPU and GPU use on every wallpaper",
-    "Sharper Golden Dunes"
+  "releases": [
+    {
+      "version": "1.2.0",
+      "date": "2026-10-31",
+      "title": "First-run setup, shareable setups and a lighter touch on battery",
+      "notes": [
+        "Set up in four steps the first time you start it",
+        "Share your whole desktop as one code: bro export and bro import",
+        "Wallpapers ease off on battery and pause below 20%",
+        "Control Center shows what the wallpaper is costing right now",
+        "Your own photo drifts and leans towards the pointer",
+        "Install with one command on Windows and Linux"
+      ]
+    },
+    {
+      "version": "1.1.0",
+      "date": "2026-10-31",
+      "title": "New Liquid wallpapers and smoother performance",
+      "notes": [
+        "Liquid pack: Koi Pond, Ink in Water, Chrome Blobs and Soap Bubble",
+        "Earthrise: the real Earth seen from the Moon",
+        "Wallpaper blur in Control Center",
+        "Lower CPU and GPU use on every wallpaper",
+        "Sharper Golden Dunes"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-10-28",
+      "title": "The first release of Mirage",
+      "notes": [
+        "A live wallpaper that sits behind your desktop icons",
+        "Widgets, a dock, Spotlight search and a local AI assistant",
+        "17 themes, each with a light and a dark look"
+      ]
+    }
   ]
 }

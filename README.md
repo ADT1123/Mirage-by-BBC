@@ -15,7 +15,28 @@ assistant. No app window, it just becomes your desktop.
 
 ## Quick start
 
-Needs **Windows 10/11** or **Linux** (see below), **Git** and **Node 22+**.
+Needs **Windows 10/11** or **Linux** (see below), **Git** and **Node 22+**. One line puts it on your desktop.
+
+**Windows** — open PowerShell and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.ps1 | iex
+```
+
+**Linux** — open a terminal and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.sh | bash
+```
+
+The script checks Git and Node, downloads Mirage to your home folder, installs it, turns on the `bro`
+command and starts it. It installs nothing else: if Git or Node 22+ is missing it tells you where to
+get it and stops. Options: `-Dir <path>` / `--dir <path>` to pick the folder, `-NoStart` / `--no-start`
+to install without starting.
+
+### If you'd rather not pipe a script
+
+Same thing by hand:
 
 ```bash
 git clone https://github.com/ADT1123/Mirage-by-BBC.git
@@ -64,6 +85,10 @@ Good to know:
 - **Wallpaper blur** in Control Center, for a calmer desktop behind your widgets
 - **17 themes**, each with light and dark: Aurora, Midnight, Terminal, Cartoon, Blast, Weather, Paper, Synthwave, Zen, Retro, Bhakti, Pastel, Ocean, Sakura, Orbit, Forest, Astronomy
 - **Widgets**: clock (8 styles), GitHub contributions, sticky notes, to-dos, weather (click for full forecast), calendar, countdown, quote, Gita verse, system stats, Smart Stack, Now Playing, photos, memories, dock. Every widget's style, color, font and size can be changed
+- **Set up in four steps** the first time you start it: pick a look, pick your widgets, say who you are, choose how hard it works
+- **Share your setup**: `bro export` turns your whole desktop into one code. A friend runs `bro import <code>` and theirs looks the same. Your name, city, notes and to-dos never travel with it
+- **Your own photo, gently alive**: a photo background drifts slowly and leans towards the pointer
+- **Kind to a battery**: unplugged, wallpapers ease off; under 20% they stop animating until you plug in. Control Center shows exactly what the wallpaper is costing right now
 - **Updates itself**: a small "Update ready" pill appears when there's a new version; one click installs it
 - **Now Playing**: full-screen player with live artwork backdrop, visualizer and recently played (`H`)
 - **Spotlight quick actions**: `note buy milk`, `todo call mom`, `ask plan my evening`
@@ -93,7 +118,9 @@ bro wall koi pond           # switch wallpaper by name or id
 bro settings                # every setting and its current value
 bro set blur 30             # change any setting (bro set quality balanced, bro set clock 24 ...)
 bro add weather             # add or remove widgets (bro remove weather)
-bro theme zen               # switch theme (bro themes lists them)
+bro export                   # pack your whole look into one code
+bro import <code>            # wear a setup a friend sent you
+bro theme zen                # switch theme (bro themes lists them)
 bro note ship it --pink     # pin a sticky note
 bro todo record voiceover   # add a task; bro done 1 ticks it off
 bro city Mumbai             # weather location

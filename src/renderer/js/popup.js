@@ -7,6 +7,7 @@ import { icon, weatherIcon } from './icons.js';
 import { renderWidgetForm, TINTS, FONTS } from './widgetform.js';
 import { fileUrl } from './widgets.js';
 import { wallPicker } from './wallpicker.js';
+import { renderWelcome } from './welcome.js';
 
 let cfg;
 let info;
@@ -45,13 +46,14 @@ export function start(env) {
     host = document.createElement('div');
     host.className = `pop pop-${view}`;
     chrome.replaceChildren(host);
-    const render = { note, todo, control, wifi: wifiMenu, sound: soundMenu, battery: batteryMenu, calendar, menu, settings, wallpapers: wallpapersView, widget: widgetEdit, weather: weatherPanel, wrapped: wrappedView, projects: projectsView, chat: chatView, update: updateView }[view];
+    const render = { note, todo, control, wifi: wifiMenu, sound: soundMenu, battery: batteryMenu, calendar, menu, settings, wallpapers: wallpapersView, widget: widgetEdit, weather: weatherPanel, wrapped: wrappedView, projects: projectsView, chat: chatView, update: updateView, welcome: welcomeView }[view];
     if (!render) return close();
     render(host, id, Number(scale) || 1);
     await fit();
     window.wall.popupReady();
     setTimeout(fit, 150); // fonts and images can still shift the size a little
   });
+  window.wall.popupMounted?.(); // the page is listening now; main may send a view
   window.wall.onSysUpdate?.((s) => live.sys?.(s));
   window.wall.onMedia?.((s) => live.media?.(s));
   window.wall.onPopupHidden(() => {
@@ -273,7 +275,7 @@ function control(root) {
       </div>
       <div class="cc-quick cc-quick4">
         ${quick('dark', 'moon', 'Dark', 'Dark mode')}
-        ${quick('taskbar', 'taskbar', 'Taskbar', 'Hide the Windows taskbar')}
+        ${quick('taskbar', 'taskbar', 'Taskbar', 'Hide the system taskbar')}
         ${quick('motion', 'sparkle', 'Motion', 'Wallpaper animations')}
         ${quick('screenshot', 'camera', 'Snip', 'Take a screenshot')}
         ${quick('edit', 'grid', 'Rearrange', 'Move and resize widgets')}
@@ -289,6 +291,10 @@ function control(root) {
         <div class="cc-sl-title"><span>Wallpaper blur</span><small data-k="blur-v"></small></div>
         <label class="slider" title="Blur the wallpaper">${icon('blur')}<input type="range" min="0" max="100" data-blur /></label>
       </div>
+      <button class="cc-perf" data-run="settings" data-k="perf" hidden>
+        <span class="cc-label"><b data-k="perf-head"></b><small data-k="perf-sub"></small></span>
+        <span class="cc-perf-bar"><i data-k="perf-fill"></i></span>
+      </button>
       <div class="cc-np" data-k="np">
         <button class="np-art-sm" data-run="player" title="Open Now Playing"></button>
         <button class="np-info" data-run="player"><b data-k="np-title"></b><small data-k="np-sub"></small></button>
@@ -334,6 +340,32 @@ function control(root) {
     const d = list?.find((x) => x.default);
     if (d) $('[data-k="out"]').textContent = shortName(d.name);
   });
+
+  // What the wallpaper is costing right now, so "it's light on your PC" is something you can
+  // check rather than take on trust. The bar is its share of one frame's time on the GPU.
+  const QUALITY = { still: 'Still picture', low: 'Low', balanced: 'Balanced', high: 'High' };
+  const paintPerf = (s) => {
+    const row = $('[data-k="perf"]');
+    if (!s) return (row.hidden = true);
+    row.hidden = false;
+    const gl = s.gl;
+    const flat = s.perf === 'low';
+    const head = flat ? 'Paused to save battery' : !s.motion ? 'Animation is off' : !gl ? 'Still wallpaper' : `${QUALITY[gl.tier] || gl.tier} · ${gl.fps} fps`;
+    const share = gl?.share ?? 0;
+    const sub = flat
+      ? `${Math.round((s.battery?.level ?? 0) * 100)}% left · plug in to resume`
+      : !gl
+      ? 'Using no GPU at all'
+      : `${gl.full}% resolution · ${share < 0.01 ? 'under 1' : Math.round(share * 100)}% of the GPU`;
+    $('[data-k="perf-head"]').textContent = head;
+    $('[data-k="perf-sub"]').textContent = sub;
+    $('[data-k="perf-fill"]').style.width = `${Math.max(2, Math.round(share * 100))}%`;
+    row.dataset.state = flat ? 'low' : share > 0.5 ? 'busy' : 'calm';
+  };
+  const pollPerf = () => window.wall.wallStats?.().then(paintPerf);
+  pollPerf();
+  const perfTimer = setInterval(pollPerf, 2000);
+  cleanup.push(() => clearInterval(perfTimer));
 
   // the media row only exists while something is playing
   const paintMedia = () => {
@@ -683,6 +715,7 @@ function settings(root) {
             .join('')}<button data-accent="song" class="song${cfg.accent === 'song' ? ' on' : ''}" title="Follow the album art of what's playing">${icon('music')}</button><label class="sm-anycolor${/^#/.test(cfg.accent || '') ? ' on' : ''}" title="Any color" style="${/^#/.test(cfg.accent || '') ? `--c:${cfg.accent}` : ''}"><input type="color" data-anyaccent value="${/^#/.test(cfg.accent || '') ? cfg.accent : '#ff6b6b'}" /></label></span></div>
           <div class="sm-row"><span>Background</span>${seg('bgmode', cfg.background ? 'photo' : 'theme', [['theme', 'Theme'], ['photo', cfg.background ? 'Change…' : 'Photo…']])}</div>
           ${cfg.background ? `<div class="sm-row"><span class="sm-thumb" style="background-image:url('${fileUrl(cfg.background).replace(/'/g, '%27')}')"></span><span>Dim</span><input type="range" min="0" max="0.8" step="0.05" data-dim value="${cfg.dim ?? 0.25}" /></div>` : ''}
+          ${cfg.background ? sw('bgMotion', 'Photo drifts and tilts', cfg.bgMotion !== false) : ''}
         </div>
 
         <div class="sm-card">
@@ -824,7 +857,7 @@ function settings(root) {
         taskbar = await window.wall.sysSet('taskbar', !taskbar);
         return paint();
       }
-      if (k === 'motion' || k === 'visualizer' || k === 'albumWall' || k === 'menubarFixed') cfg[k] = cfg[k] === false;
+      if (k === 'motion' || k === 'visualizer' || k === 'albumWall' || k === 'menubarFixed' || k === 'bgMotion') cfg[k] = cfg[k] === false;
       else if (k === 'weatherFx') cfg.weatherFx = cfg.weatherFx === 'off' ? 'auto' : 'off';
       else cfg[k] = !cfg[k];
     }
@@ -1169,29 +1202,102 @@ function chatView(root, prefill) {
   setTimeout(() => input.focus(), 60);
 }
 
+// ---------------------------------------------------------------- first run
+
+function welcomeView(root) {
+  try {
+    build(root);
+  } catch (e) {
+    // a first run that can't show the wizard must not leave a blank window
+    console.error('[welcome]', e);
+    root.innerHTML = `<div class="panel wc"><div class="wc-head"><b>Welcome to ${esc(info.brand?.name || '')}</b><small>${esc(String(e && e.message))}</small></div>
+      <div class="wc-foot"><div class="wc-steps"></div><button class="wc-btn primary" data-skip>Get started</button></div></div>`;
+    root.querySelector('[data-skip]').addEventListener('click', async () => {
+      cfg.onboarded = true;
+      await save();
+      close();
+    });
+    fit();
+  }
+}
+
+function build(root) {
+  renderWelcome(root, {
+    info,
+    cfg,
+    geocode: (q) => window.wall.geocode(q),
+    preset: (theme) => window.wall.preset(theme),
+    onResize: fit,
+    onDone: async (picked) => {
+      cfg.onboarded = true;
+      if (picked) {
+        const { add, ...rest } = picked;
+        Object.assign(cfg, rest);
+        // a widget the pack's own layout doesn't place goes in the middle, stacked downwards
+        for (const [i, type] of add.entries()) cfg.widgets.push(await window.wall.make(type, 0.5, 0.42 + i * 0.07, { align: 'center' }));
+      }
+      await save();
+      close();
+    },
+  });
+}
+
 // ---------------------------------------------------------------- updates
 
 function updateView(root) {
   root.innerHTML = '<div class="panel upd"><div class="wx-loading">Checking for updates…</div></div>';
   const panel = root.firstElementChild;
+  let last = null;
+  let showLog = false;
+
+  const version = (v) => (v ? ` ${esc(v)}` : '');
+  const when = (d) => {
+    const t = d && new Date(d);
+    return t && !isNaN(t) ? t.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  };
+  const notes = (r) => (r.notes.length ? `<ul class="up-list">${r.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '');
+  const release = (r) => `
+    <div class="up-rel">
+      <div class="up-rel-head"><b>${esc(info.brand?.name || '')}${version(r.version)}</b>${when(r.date) ? `<time>${when(r.date)}</time>` : ''}</div>
+      <small>${esc(r.title)}</small>
+      ${notes(r)}
+    </div>`;
+
+  // every release so far, newest first
+  const changelog = (s) => `
+    <div class="up-top"><button class="up-back" data-log="0">${icon('chevron')}</button><b>What's new</b></div>
+    <div class="up-log">${s.history.length ? s.history.map(release).join('') : '<small>No release notes yet.</small>'}</div>
+    <div class="up-btns"><button class="wr-btn" data-later>Close</button></div>`;
+
   const paint = (s) => {
-    if (s.available) {
+    last = s;
+    if (showLog) panel.innerHTML = changelog(s);
+    else if (s.available) {
+      // one entry per new version, so skipping a release still shows what it brought
+      const list = s.changes.length ? s.changes : [s.release];
       panel.innerHTML = `
         <div class="up-ic">${icon('download')}</div>
-        <b>${esc(info.brand?.name || '')}${s.release.version ? ` ${esc(s.release.version)}` : ''} is available</b>
+        <b>${esc(info.brand?.name || '')}${version(s.release.version)} is available</b>
         <small>${esc(s.release.title)}</small>
-        ${s.release.notes.length ? `<ul class="up-list">${s.release.notes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+        ${s.changes.length > 1 ? list.map(release).join('') : notes(s.release)}
         <div class="up-btns"><button class="wr-btn primary" data-go>Update now</button><button class="wr-btn" data-later>Later</button></div>
-        <small class="up-msg" data-k="msg"></small>`;
+        <small class="up-msg" data-k="msg"></small>
+        ${s.history.length ? '<button class="up-more" data-log="1">See all releases</button>' : ''}`;
     } else {
       const why = s.error === 'not-a-clone' ? 'This copy was not cloned with git, so it can’t update itself.' : s.error === 'offline' ? 'Couldn’t reach GitHub. Check your internet.' : 'You have the latest version.';
-      panel.innerHTML = `<div class="up-ic ok">${icon(s.error ? 'x' : 'check')}</div><b>${s.error ? 'Can’t check right now' : 'You’re up to date'}</b><small>${why}</small><div class="up-btns"><button class="wr-btn" data-later>Close</button></div>`;
+      panel.innerHTML = `<div class="up-ic ok">${icon(s.error ? 'x' : 'check')}</div><b>${s.error ? 'Can’t check right now' : 'You’re up to date'}</b><small>${why}</small>
+        <div class="up-btns"><button class="wr-btn" data-later>Close</button></div>
+        ${s.history?.length ? '<button class="up-more" data-log="1">See what\'s new</button>' : ''}`;
     }
     fit();
   };
   panel.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
+    if (b.dataset.log !== undefined) {
+      showLog = b.dataset.log === '1';
+      return paint(last);
+    }
     if (b.dataset.later !== undefined) return close();
     if (b.dataset.go !== undefined) {
       b.textContent = 'Updating…';

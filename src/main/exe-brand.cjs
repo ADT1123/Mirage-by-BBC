@@ -1,8 +1,13 @@
-// Windows: Task Manager, the volume mixer and "Startup apps" name a program after the icon and
-// description stored inside its .exe, so a plain Electron install shows up as "Electron".
-// This makes Mirage.exe next to electron.exe (same runtime, same folder) with Mirage's logo
-// and name written into its resources, and the CLI launches that instead. Built once, and
-// again only when Electron or the logo changes. Any failure falls back to electron.exe.
+// A plain Electron install calls itself "Electron" everywhere the system names a running
+// program. This gives it Mirage's name instead, and the CLI launches what it returns.
+//
+//   Windows: Task Manager, the volume mixer and "Startup apps" read the icon and description
+//     stored inside the .exe, so we copy electron.exe to Mirage.exe (same runtime, same folder)
+//     and write Mirage's logo and name into the copy's resources. Rebuilt only when Electron or
+//     the logo changes.
+//   Linux: the name comes from the file that was run, so a hard link called Mirage is enough.
+//
+// Anything that fails falls back to Electron's own binary, which always works.
 
 const fs = require('fs');
 const path = require('path');
@@ -169,8 +174,27 @@ function patch(file, src) {
   if (!end(h, !ok) || !ok) throw new Error('UpdateResource failed');
 }
 
-// path to launch: Mirage.exe when it can be made, otherwise electron.exe itself
+// Linux has no resource table to patch, but the kernel names a process after the file that was
+// run, so a second name for the same file is enough: System Monitor, `ps` and the dock all say
+// Mirage. A hard link costs no disk and keeps Electron's own files next to it, which is how it
+// finds them. If the filesystem refuses one, Electron's own binary still works.
+function linkedBinary(electronBin) {
+  try {
+    const target = path.join(path.dirname(electronBin), brand.name);
+    const real = fs.statSync(electronBin);
+    const have = fs.statSync(target, { throwIfNoEntry: false });
+    if (have && have.ino === real.ino && have.dev === real.dev) return target;
+    if (have) fs.rmSync(target, { force: true });
+    fs.linkSync(electronBin, target);
+    return target;
+  } catch {
+    return electronBin;
+  }
+}
+
+// path to launch: a binary that carries Mirage's name (and, on Windows, its icon)
 function brandedExe(electronExe) {
+  if (process.platform === 'linux') return linkedBinary(electronExe);
   if (process.platform !== 'win32') return electronExe;
   try {
     const target = path.join(path.dirname(electronExe), `${brand.name}.exe`);

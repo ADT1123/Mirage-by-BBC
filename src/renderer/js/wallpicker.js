@@ -25,7 +25,7 @@ function thumbKey(wall, cfg, night) {
 }
 
 // thumbnails are drawn one at a time (they share one GPU context) and kept for next time
-function fillThumb(el, wall, cfg, night) {
+export function fillThumb(el, wall, cfg, night) {
   if (wall.kind === 'scene') {
     el.classList.add('thumb');
     el.dataset.t = wall.scene;

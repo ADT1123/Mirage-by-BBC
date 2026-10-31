@@ -55,6 +55,8 @@ try {
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform', 'x11');
   app.commandLine.appendSwitch('enable-transparent-visuals');
+  // the window's X11 class, so the dock matches it to Mirage's launcher entry and icon
+  app.commandLine.appendSwitch('class', brand.name);
 }
 
 // Every window is a sandboxed renderer: page code only reaches the app through preload.cjs,
@@ -128,6 +130,7 @@ function boot() {
   setupExtras();
   activity.start();
   setupUpdates();
+  setupStats();
   spotlight.startIndexing({ repos: git.repoPaths, action: interact.action, runAction: runSpotlightAction });
   registerSpotlightIpc();
   setTimeout(createSpotlight, 1200);
@@ -137,6 +140,9 @@ function boot() {
   applyAutostart();
   watchConfig();
   startControlServer();
+  // First run: four short steps instead of landing on a default desktop. The wallpaper gets a
+  // moment to appear first, so the choices are made over the real thing.
+  if (!cfg.onboarded) setTimeout(() => interact.action('welcome'), 2500);
 
   screen.on('display-added', scheduleRebuild);
   screen.on('display-removed', scheduleRebuild);
@@ -491,6 +497,14 @@ const aiHooks = {
 
 // ---------- updates ----------
 
+// The wallpaper reports what it costs every couple of seconds; Control Center is its own
+// window, so the numbers pass through here.
+let wallStats = null;
+function setupStats() {
+  ipcMain.handle('wall:report', (_e, s) => ((wallStats = { ...s, at: Date.now() }), true));
+  ipcMain.handle('wall:stats', () => (wallStats && Date.now() - wallStats.at < 10000 ? wallStats : null));
+}
+
 function setupUpdates() {
   updater.start();
   updater.onAvailable((s) => {
@@ -808,6 +822,7 @@ function startControlServer() {
           hotkey: activeHotkey,
           spotlight: spotlightKey,
           index: spotlight.stats(),
+          wall: wallStats,
           player: player && !player.isDestroyed() ? { visible: player.isVisible(), opacity: player.getOpacity(), min: player.isMinimized(), fs: player.isFullScreen(), focused: player.isFocused(), bounds: player.getBounds() } : null,
         });
       case '/edit':

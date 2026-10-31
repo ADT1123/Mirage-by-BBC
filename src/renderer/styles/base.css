@@ -74,7 +74,26 @@ body {
   background-position: center;
 }
 #backdrop::after { content: ''; position: absolute; inset: 0; background: rgba(0, 0, 0, var(--dim, 0.25)); }
-[data-bg='image'] #backdrop { display: block; }
+[data-bg='image'] #backdrop {
+  display: block;
+  /* --bg-x/--bg-y are set on the root as the pointer moves; the lean gets its own property so
+     the drift animation below can stay on the compositor */
+  translate: var(--bg-x, 0%) var(--bg-y, 0%);
+  transform: scale(var(--bg-zoom, 1));
+}
+[data-bgmotion] #backdrop {
+  --bg-zoom: 1.08;
+  transition: translate 1.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation: bg-drift 96s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes bg-drift {
+  from { transform: scale(1.08) translate3d(-0.9%, -0.6%, 0); }
+  to { transform: scale(1.11) translate3d(0.9%, 0.6%, 0); }
+}
+[data-motion='off'] #backdrop, [data-perf='low'] #backdrop { animation: none; }
+[data-blur][data-bgmotion] #backdrop { animation: none; }
+
 [data-bg='image'] #scene { display: none; }
 /* wallpaper blur (Control Center), for every pack and for photos */
 [data-blur] #scene, [data-blur] #backdrop { filter: blur(var(--wall-blur)); transform: scale(var(--wall-grow)); }

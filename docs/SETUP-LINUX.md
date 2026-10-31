@@ -55,6 +55,39 @@ After installing, **close the terminal and open a new one**, then run `node --ve
 
 ---
 
+## Steps 2 to 5 in one command
+
+Have Git and Node 22+? Then you can skip steps 2, 3, 4 and 5. Paste this into your terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.sh | bash
+```
+
+It does what those four steps do, in order: downloads Mirage into `$HOME/Mirage-by-BBC`, runs
+`npm install`, runs `npm link` so the `bro` command works, and starts Mirage. It prints each step as
+it goes and stops with a plain explanation if one fails.
+
+It installs nothing on its own, and it never runs `sudo`. If Git or Node 22+ is missing it shows you
+the command for your distro and stops, so you stay in charge of what lands on your PC. If `npm link`
+hits a permission error it prints the `sudo npm link` line for you to run yourself.
+
+Options go after `--`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.sh | bash -s -- --dir ~/apps/Mirage-by-BBC
+curl -fsSL https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.sh | bash -s -- --no-start
+```
+
+`--dir <folder>` picks where Mirage goes. `--no-start` installs it without starting it.
+
+When it prints **All set**, carry on at [6. Check your PC and set up shortcuts](#6-check-your-pc-and-set-up-shortcuts).
+
+**Rather not pipe a script into bash?** Fair enough. Steps 2 to 5 below are the same commands, one at
+a time, so you can see each one before you run it. You can also read the script first:
+`curl -fsSL <that URL> | less`.
+
+---
+
 ## 2. Get Mirage
 
 1. Go to your home folder:
@@ -117,7 +150,19 @@ Then show your desktop. It's now the Mirage wallpaper.
 
 - You can close the terminal now. Mirage keeps running.
 - Mirage's menu bar starts just below your desktop's own top panel.
-- On first run there's a small how-to hint on the wallpaper. It goes away once you open edit mode.
+
+**The first time only**, a short setup panel opens after a couple of seconds:
+
+1. **Pick a look** — eight live wallpapers, one from each pack. The small previews are the real thing.
+2. **What goes on it** — tick the widgets you want. You can add the rest later.
+3. **About you** — your name for the greeting, your city for weather and sunset times.
+4. **How hard should it work** — Automatic, Balanced or High.
+
+**Skip** leaves the default desktop. Either way the panel does not come back. To change any of it
+later, press `Alt+W` or run `bro settings`.
+
+In your app menu and system monitor Mirage shows up as **Mirage**, with its own icon, rather than
+as "Electron".
 
 **On Wayland** (the default on recent Ubuntu and Fedora), Mirage runs through XWayland automatically. You don't need to change anything.
 
@@ -266,7 +311,9 @@ On Linux, the Control Center's buttons use your desktop's tools:
 
 Open **Control Center → Settings**, or the logo menu → **Settings**. Click **More settings** for:
 
-- **Performance**: Auto, Battery saver, Full quality.
+- **Performance**: Auto, Battery saver, Full quality. On **Auto**, a laptop running on battery drops
+  the wallpaper a quality step, and below 20% charge the wallpaper stops animating until you plug in.
+  **Full quality** turns both off.
 - **Wallpaper quality**: Auto, Low, Balanced, High.
 - **Graphics**: Fast GPU or Power saving (for laptops with two graphics chips).
 - Season, desktop pet, widget style, corners and font.
@@ -274,6 +321,11 @@ Open **Control Center → Settings**, or the logo menu → **Settings**. Click *
   hide taskbar, and autostart.
 - Your own **Rearrange** and **Spotlight** shortcuts (these are Mirage's own keys; on Wayland use `bro shortcuts` instead).
 - Your name and city.
+- **Photo drifts and tilts** (only when you use your own photo as the background): the photo moves
+  slowly and leans a little towards the pointer.
+
+Control Center also shows a small row with what the wallpaper is costing right now — its quality,
+frame rate, how sharp it is rendering and its share of the graphics card.
 
 ### The tray icon
 
@@ -302,6 +354,9 @@ Or run one command at a time:
 | `bro motion on\|off` | Animations on or off (saves battery) |
 | `bro taskbar hide\|show` | Hide or pin the Ubuntu Dock |
 | `bro reset` | Put the widgets back to the current theme's layout |
+| `bro settings`, `bro set <name> <value>` | See every setting, or change one |
+| `bro export` | Pack your whole look into one code to send a friend |
+| `bro import <code>` | Put on a setup someone sent you (your notes and details stay yours) |
 | `bro config` | Show where your settings file is |
 | `bro doctor` | Check what works on this PC |
 | `bro shortcuts` | GNOME: add `Alt+W` and `Ctrl+Space` as system shortcuts |

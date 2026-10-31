@@ -334,7 +334,9 @@ function setAutostart(on, electronPath, appRoot) {
 function setLauncher(electronPath, appRoot) {
   const dir = path.join(HOME, '.local', 'share', 'applications');
   const file = path.join(dir, 'mirage.desktop');
-  const body = `[Desktop Entry]\nType=Application\nName=Mirage\nComment=Live desktop wallpaper\nExec="${electronPath}" "${appRoot}"\nIcon=${path.join(appRoot, 'assets', 'icon.png')}\nCategories=Utility;\nTerminal=false\n`;
+  // StartupWMClass ties the running window to this entry, so the dock shows Mirage's own icon
+  // and name instead of a second, nameless Electron tile next to it
+  const body = `[Desktop Entry]\nType=Application\nName=Mirage\nComment=Live desktop wallpaper\nExec="${electronPath}" "${appRoot}"\nIcon=${path.join(appRoot, 'assets', 'icon.png')}\nStartupWMClass=Mirage\nCategories=Utility;\nTerminal=false\n`;
   try {
     if (fs.readFileSync(file, 'utf8') === body) return;
   } catch {}

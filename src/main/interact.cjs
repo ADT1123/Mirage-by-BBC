@@ -15,7 +15,7 @@ const linux = process.platform === 'linux' ? require('./linux.cjs') : null;
 const config = require('../shared/config.cjs');
 
 const PAGE = path.join(__dirname, '..', 'renderer', 'index.html');
-const SIZES = { control: [380, 560], wifi: [324, 420], sound: [324, 360], battery: [324, 340], calendar: [330, 380], menu: [320, 440], settings: [380, 680], wallpapers: [710, 680], widget: [360, 640], weather: [440, 640], projects: [340, 480], wrapped: [400, 760], update: [360, 300], chat: [380, 560] };
+const SIZES = { control: [380, 560], wifi: [324, 420], sound: [324, 360], battery: [324, 340], calendar: [330, 380], menu: [320, 440], settings: [380, 680], wallpapers: [710, 680], widget: [360, 640], weather: [440, 640], projects: [340, 480], wrapped: [400, 760], update: [360, 300], welcome: [430, 620], chat: [380, 560] };
 
 let hooks = null;
 const t0 = Date.now();
@@ -117,12 +117,10 @@ function ensurePopup() {
   });
   win.webContents.on('render-process-gone', (_e, d) => console.error(`[popup] renderer gone: ${d.reason}`));
   win.loadFile(PAGE, { query: { mode: 'popup' } });
-  win.webContents.once('did-finish-load', () => {
-    popupReady = true;
-    const go = pendingShow;
-    pendingShow = null;
-    go?.();
-  });
+  // 'did-finish-load' means the HTML arrived, not that the page's modules have run, so a view
+  // asked for right after startup used to be sent to a page with no listener yet and vanish.
+  // popup.js says 'popup:mounted' once it is really listening; the timer is only a safety net.
+  win.webContents.once('did-finish-load', () => setTimeout(popupMounted, 2000));
   // blur only counts once the popup really had focus, and never right after opening
   win.on('focus', () => (popupFocused = true));
   win.on('blur', () => {
@@ -147,6 +145,15 @@ function closePopup(reason = '') {
 }
 
 // anchor: rect in the sender's page coordinates (CSS px), for note/todo popups
+function popupMounted() {
+  if (popupReady) return;
+  dbg('mounted');
+  popupReady = true;
+  const go = pendingShow;
+  pendingShow = null;
+  go?.();
+}
+
 function openPopup(sender, view, data = {}) {
   // clicking the same menu-bar item again closes it (the press already did), like macOS
   if (lastClosed.reason === 'outside' && lastClosed.view === view && Date.now() - lastClosed.at < 400 && !data.anchor) return;
@@ -392,6 +399,8 @@ async function action(name, arg) {
       return openPopup(null, 'wrapped', { center: true });
     case 'update':
       return openPopup(null, 'update', { center: true });
+    case 'welcome':
+      return openPopup(null, 'welcome', { center: true });
     case 'weather-panel':
       return openPopup(null, 'weather', { center: true });
     case 'settings-panel':
@@ -437,6 +446,7 @@ function register(h) {
   hooks = h;
   ipcMain.handle('popup:open', (e, view, data) => openPopup(e.sender, view, data));
   ipcMain.handle('popup:close', () => closePopup());
+  ipcMain.handle('popup:mounted', () => (popupMounted(), true));
   ipcMain.handle('popup:ready', () => revealPopup());
   ipcMain.handle('popup:resize', (e, w, h2) => {
     dbg('resize', w, h2);

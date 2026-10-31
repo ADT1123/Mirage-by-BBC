@@ -41,6 +41,38 @@ After installing, **close PowerShell and open a new one**, then run the two comm
 
 ---
 
+## Steps 2 to 5 in one command
+
+Have Git and Node 22+? Then you can skip steps 2, 3, 4 and 5. Paste this into PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.ps1 | iex
+```
+
+It does what those four steps do, in order: downloads Mirage into `$HOME\Mirage-by-BBC`, runs
+`npm install`, runs `npm link` so the `bro` command works, and starts Mirage. It prints each step as
+it goes and stops with a plain explanation if one fails.
+
+It installs nothing on its own. If Git or Node 22+ is missing it tells you the download page and stops,
+so you stay in charge of what lands on your PC.
+
+Want to choose the folder, or not start it right away? Save the script first, then run it:
+
+```powershell
+cd $HOME
+irm https://raw.githubusercontent.com/ADT1123/Mirage-by-BBC/main/scripts/install.ps1 -OutFile mirage-install.ps1
+powershell -ExecutionPolicy Bypass -File .\mirage-install.ps1 -Dir D:\Apps\Mirage-by-BBC
+```
+
+`-Dir <folder>` picks where Mirage goes. `-NoStart` installs it without starting it.
+
+When it prints **All set**, carry on at [6. Start Mirage when you log in](#6-start-mirage-when-you-log-in).
+
+**Rather not pipe a script into PowerShell?** Fair enough. Steps 2 to 5 below are the same commands,
+one at a time, so you can see each one before you run it.
+
+---
+
 ## 2. Get Mirage
 
 1. In PowerShell, go to your home folder (a good place to keep it):

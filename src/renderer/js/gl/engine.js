@@ -43,9 +43,12 @@ const TIERS = {
 // usable GPU (old driver, VM, remote desktop) Chrome draws WebGL on the CPU: keep it still.
 export function tierOf(cfg, gpu) {
   if (gpu === 'none') return 'still';
+  // a nearly flat battery wins over every other setting: a still picture draws no GPU at all
+  const perf = document.documentElement.dataset.perf;
+  if (perf === 'low') return 'still';
   const q = cfg?.wallQuality;
   if (TIERS[q]) return q;
-  if (document.documentElement.dataset.perf === 'saver') return 'low';
+  if (perf === 'saver') return 'low';
   return gpu === 'dedicated' ? 'high' : 'balanced';
 }
 
@@ -380,6 +383,9 @@ export function mountWall(host, wall, ctx0) {
   let acc = 0;
   let frames = 0;
   let lastFps = 0;
+  let shown = 0; // frames a second as actually drawn, for the Control Center read-out
+  let shownAcc = 0;
+  let shownFrames = 0;
   let gpuMs = null; // what a frame costs on the GPU at the current resolution
   let env = envOf(ctx);
   let envAt = 0;
@@ -550,7 +556,26 @@ export function mountWall(host, wall, ctx0) {
         frames = 0;
       }
     }
-    canvas.gpuMs = gpuMs; // for performance tests
+    // a live read-out for Control Center (and the performance tests): what this wallpaper is
+    // really costing right now, measured rather than guessed
+    canvas.gpuMs = gpuMs;
+    shownAcc += dt;
+    shownFrames++;
+    if (shownAcc >= 1) {
+      shown = shownFrames / shownAcc;
+      shownAcc = 0;
+      shownFrames = 0;
+    }
+    canvas.wallStats = {
+      name,
+      tier,
+      fps: Math.round(shown),
+      gpuMs,
+      share: gpuMs == null ? null : Math.min(1, gpuMs / (1000 / Math.max(fps, 1))),
+      w: canvas.width,
+      h: canvas.height,
+      full: Math.round((canvas.width / Math.max(1, Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio || 1, T.dpr)))) * 100),
+    };
     return 1000 / fps;
   }
 

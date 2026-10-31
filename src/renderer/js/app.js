@@ -45,13 +45,21 @@ function setHidden(h) {
   }
 }
 
-// Performance: 'auto' saves power on battery and on modest laptops (fewer cores / less memory)
+// Performance: 'auto' saves power on battery and on modest laptops (fewer cores / less memory).
+// Unplugged the wallpaper drops a quality tier; under 20% left it stops animating altogether
+// until you plug in. 'full' opts out of both, 'saver' is always on.
 const weakDevice = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
+const LOW_BATTERY = 0.2;
 function applyPerf() {
   const mode = cfg?.perf || 'auto';
-  const onBattery = store.battery && !store.battery.plugged;
-  const saver = mode === 'saver' || (mode === 'auto' && (weakDevice || onBattery));
-  root.dataset.perf = saver ? 'saver' : 'full';
+  const b = store.battery;
+  const onBattery = b && !b.plugged;
+  const flat = onBattery && (b.level ?? 1) <= LOW_BATTERY;
+  const was = root.dataset.perf;
+  root.dataset.perf =
+    mode === 'full' ? 'full' : flat ? 'low' : mode === 'saver' || (mode === 'auto' && (weakDevice || onBattery)) ? 'saver' : 'full';
+  // the wallpaper picks its quality from this, so tell it the moment it changes
+  if (was !== undefined && was !== root.dataset.perf) scene?.update(ctx());
 }
 
 const store = { git: null, weather: null, system: null, battery: null, quote: null, verse: null, art: null, dock: null, media: null };
@@ -111,6 +119,7 @@ async function applyLook() {
     root.dataset.bg = url ? 'image' : 'scene';
   }
   backdrop.style.setProperty('--dim', String(cfg.dim ?? 0.25));
+  root.toggleAttribute('data-bgmotion', !!cfg.background && cfg.bgMotion !== false && MODE === 'wallpaper');
   applyBlur();
   applyAccent();
 
@@ -131,6 +140,26 @@ async function applyLook() {
 
 // Wallpaper blur (Control Center): the scene and photo layers blur, and grow just enough that
 // the soft edges stay off screen. Up to 40px at 1080p, the same look on any screen size.
+// A photo background leans slightly towards the pointer, which reads as depth without
+// anything moving much. The drift (CSS) keeps going on its own; this only nudges the offset.
+let tiltRaf = 0;
+function watchTilt() {
+  if (MODE !== 'wallpaper' || !PRIMARY) return;
+  let x = 0;
+  let y = 0;
+  window.addEventListener('mousemove', (e) => {
+    if (!root.hasAttribute('data-bgmotion') || e.clientX < 0 || e.clientY < 0) return;
+    x = (e.clientX / innerWidth - 0.5) * -2.4;
+    y = (e.clientY / innerHeight - 0.5) * -1.6;
+    if (tiltRaf) return;
+    tiltRaf = requestAnimationFrame(() => {
+      tiltRaf = 0;
+      root.style.setProperty('--bg-x', `${x.toFixed(2)}%`);
+      root.style.setProperty('--bg-y', `${y.toFixed(2)}%`);
+    });
+  });
+}
+
 function applyBlur() {
   const px = (Math.min(100, Math.max(0, cfg.wallBlur || 0)) / 100) * 40 * (innerHeight / 1080);
   root.style.setProperty('--wall-blur', `${px.toFixed(1)}px`);
@@ -431,6 +460,23 @@ async function pollSystem() {
   tick();
 }
 
+// What the wallpaper costs right now, handed to the main process so Control Center (its own
+// window) can show it. Only the primary screen reports, and only numbers are sent.
+function reportStats() {
+  if (MODE !== 'wallpaper' || !PRIMARY || DEMO || !window.wall.wallStats) return;
+  const s = document.querySelector('#scene canvas')?.wallStats;
+  const wall = wallOf();
+  window.wall.reportStats({
+    wall: wall?.name || '',
+    kind: wall?.kind || 'image',
+    perf: root.dataset.perf,
+    motion: cfg.motion !== false,
+    quality: cfg.wallQuality || 'auto',
+    battery: store.battery ? { level: store.battery.level, plugged: !!store.battery.plugged } : null,
+    gl: s ? { fps: s.fps, tier: s.tier, gpuMs: s.gpuMs, share: s.share, w: s.w, h: s.h, full: s.full } : null,
+  });
+}
+
 async function watchBattery() {
   if (DEMO) return;
   try {
@@ -576,6 +622,8 @@ async function boot() {
   }, 1000 - (Date.now() % 1000));
   setInterval(render, 60 * 1000);
   setInterval(pollSystem, 2000);
+  setInterval(reportStats, 2000);
+  reportStats();
   setInterval(() => pollGit(true), 10 * 60 * 1000);
   setInterval(() => pollWeather(true), 15 * 60 * 1000);
   setInterval(pollDaily, 30 * 60 * 1000);
@@ -597,6 +645,7 @@ async function boot() {
   dockKey = JSON.stringify(cfg.dock ?? null);
   pollDock();
   watchBattery();
+  watchTilt();
   // a new version on GitHub shows as "Update" in the menu bar, and as a pill at the top of the
   // screen that stays put (the menu bar may be tucked away) until you update
   if (MODE === 'wallpaper' && PRIMARY && !DEMO && window.wall.updateStatus) {
