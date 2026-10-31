@@ -104,12 +104,22 @@ function analogFace() {
     <circle class="af-pin" r="4.5"/></svg>`;
 }
 
+// "It's ten past one": the Words look, to the nearest five minutes
+const NUM = ['twelve', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'];
+const PAST = ['', 'five past', 'ten past', 'quarter past', 'twenty past', 'twenty-five past', 'half past', 'twenty-five to', 'twenty to', 'quarter to', 'ten to', 'five to'];
+function inWords(now) {
+  const steps = Math.round((now.getHours() * 60 + now.getMinutes()) / 5);
+  const m = steps % 12;
+  const h = NUM[(Math.floor(steps / 12) + (m > 6 ? 1 : 0)) % 12];
+  return m ? `It's ${PAST[m]} ${h}` : `It's ${h} o'clock`;
+}
+
 const clock = {
   render: (w, ctx) =>
     (w.variant || 'classic') === 'analog'
       ? `<div class="clock analog">${analogFace()}<div class="clock-date" data-k="date"></div></div>`
       : `
-    <div class="clock v-${w.variant || 'classic'}${w.showDate === false ? ' no-date' : ''}${w.showGreeting === false ? ' no-greet' : ''}">
+    <div class="clock v-${w.variant || 'classic'}${w.textAlign ? ` ta-${w.textAlign}` : ''}${w.showDate === false ? ' no-date' : ''}${w.showGreeting === false ? ' no-greet' : ''}">
       <div class="term-line"><span class="t-user">${esc((ctx.info.user || 'you').toLowerCase())}@${esc(cmd(ctx))}</span><span class="t-dim">:</span><span class="t-path">~</span><span class="t-dim">$</span> date</div>
       <div class="clock-date" data-k="date"></div>
       <div class="clock-time" data-k="time"></div>
@@ -130,10 +140,15 @@ const clock = {
     let h = now.getHours();
     let ampm = '';
     if (!ctx.cfg.clock24) {
-      ampm = h >= 12 ? 'PM' : 'AM';
+      ampm = w.ampm === false ? '' : h >= 12 ? 'PM' : 'AM';
       h = h % 12 || 12;
     }
-    const time = `<span class="hh">${ctx.cfg.clock24 ? pad(h) : h}</span><span class="sep">:</span><span class="mm">${pad(now.getMinutes())}</span>${ampm ? `<span class="ampm">${ampm}</span>` : ''}`;
+    const hh = ctx.cfg.clock24 || w.zero !== false ? pad(h) : String(h);
+    const secs = w.seconds ? `<span class="ss">${pad(now.getSeconds())}</span>` : '';
+    const time =
+      w.variant === 'words'
+        ? `<span class="words">${inWords(now)}</span>`
+        : `<span class="hh">${hh}</span><span class="sep">:</span><span class="min">${pad(now.getMinutes())}</span>${secs}${ampm ? `<span class="ampm">${ampm}</span>` : ''}`;
     set(el, 'time', time, true);
     set(el, 'date', now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }));
     const name = ctx.cfg.name || ctx.info.user;

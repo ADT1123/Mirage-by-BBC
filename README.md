@@ -1,21 +1,30 @@
-# Mirage
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png" />
+    <img src="assets/logo.png" alt="Mirage" width="260" />
+  </picture>
+</p>
 
-A live wallpaper you can actually use. It sits behind your desktop icons and turns the desktop into
-a home screen: sticky notes, to-dos, your GitHub graph, weather, music, a dock, Spotlight search and
-a local AI assistant. No app window, it just becomes your desktop.
+<p align="center"><b>A live wallpaper you can actually use.</b></p>
+
+Mirage sits behind your desktop icons and turns the desktop into a home screen: live 3D wallpapers,
+sticky notes, to-dos, your GitHub graph, weather, music, a dock, Spotlight search and a local AI
+assistant. No app window, it just becomes your desktop.
+
+**Setup guides:** [Windows](docs/SETUP-WINDOWS.md) · [Linux](docs/SETUP-LINUX.md)
 
 ## Quick start
 
-Needs **Windows 10/11** or **Linux** (see below), and **Node 22+**.
+Needs **Windows 10/11** or **Linux** (see below), **Git** and **Node 22+**.
 
 ```bash
-git clone <this repo>
-cd <this repo>
+git clone https://github.com/ADT1123/Mirage-by-BBC.git
+cd Mirage-by-BBC
 npm install
 npm start          # puts it on your desktop
 ```
 
-`npm run stop` brings your normal wallpaper back. Run `npm link` once to use the `brow` command anywhere.
+`npm run stop` brings your normal wallpaper back. Run `npm link` once to use the `bro` command anywhere.
 
 ### Linux
 
@@ -40,11 +49,22 @@ Good to know:
 | `Ctrl+Space` | Spotlight: apps, files, settings, math, web, AI |
 | Click on the wallpaper | Notes, to-dos, Wi-Fi (Control Center), dock, music all work |
 | `•••` on a widget | Edit that widget (style, color, size, options) |
+| `Esc` | Close the open panel, then leave edit mode |
 
 ## Features
 
+- **89 wallpapers in 10 packs**, most of them live 3D that react to your mouse:
+  - **Glass & Chrome**: liquid glass and molten metal, lit like a studio
+  - **Liquid**: chrome blobs, a soap bubble, ink in water and a koi pond
+  - **Silk**: satin folds that slowly breathe
+  - **Landscapes**: dunes, northern lights and a live sky
+  - **Astronomy**: the Sun, every planet, tonight's Moon, the real Earth and Earthrise, from real maps
+  - **Clay**, **Neon & Tech**, **Color** (gradients in any colors), **Emoji** and the original **Classics**
+- **Light on any laptop**: wallpapers idle at a low frame rate, speed up while you interact, and never take more than a small share of the GPU
+- **Wallpaper blur** in Control Center, for a calmer desktop behind your widgets
 - **17 themes**, each with light and dark: Aurora, Midnight, Terminal, Cartoon, Blast, Weather, Paper, Synthwave, Zen, Retro, Bhakti, Pastel, Ocean, Sakura, Orbit, Forest, Astronomy
-- **Widgets**: clock, GitHub contributions, sticky notes, to-dos, weather (click for full forecast), calendar, countdown, quote, Gita verse, system stats, Smart Stack, Now Playing, dock
+- **Widgets**: clock (8 styles), GitHub contributions, sticky notes, to-dos, weather (click for full forecast), calendar, countdown, quote, Gita verse, system stats, Smart Stack, Now Playing, photos, memories, dock. Every widget's style, color, font and size can be changed
+- **Updates itself**: a small "Update ready" pill appears when there's a new version; one click installs it
 - **Now Playing**: full-screen player with live artwork backdrop, visualizer and recently played (`H`)
 - **Spotlight quick actions**: `note buy milk`, `todo call mom`, `ask plan my evening`
 - **Local AI**: answers questions and organizes your to-dos, notes and countdowns (see below)
@@ -60,24 +80,29 @@ Runs fully on your PC with [Ollama](https://ollama.com). Nothing is sent online.
 ollama pull llama3.1:8b      # one-time download (~5 GB)
 ```
 
-Then press `Ctrl+Space` and type `ask sort my to-dos by urgency`, or use `brow ai <question>`.
-Switch models with `brow ai models` and `brow ai model <name>`.
+Then press `Ctrl+Space` and type `ask sort my to-dos by urgency`, or use `bro ai <question>`.
+Switch models with `bro ai models` and `bro ai model <name>`.
 
 ## CLI
 
-Run `brow` for the interactive shell (type `/` for the menu), or one command at a time:
+Run `bro` for the interactive shell (type `/` for the menu), or one command at a time:
 
 ```bash
-brow theme zen               # switch theme (brow themes lists them)
-brow note ship it --pink     # pin a sticky note
-brow todo record voiceover   # add a task; brow done 1 ticks it off
-brow city Mumbai             # weather location
-brow appearance dark         # light | dark | auto
-brow pet bird                # cat | bird | off
-brow fx snow                 # desktop weather: auto | off | rain | snow | storm
-brow wrapped                 # this week's summary
-brow autostart on            # start with Windows
-brow help                    # everything else
+bro walls liquid            # list wallpapers (all 89, or one pack)
+bro wall koi pond           # switch wallpaper by name or id
+bro settings                # every setting and its current value
+bro set blur 30             # change any setting (bro set quality balanced, bro set clock 24 ...)
+bro add weather             # add or remove widgets (bro remove weather)
+bro theme zen               # switch theme (bro themes lists them)
+bro note ship it --pink     # pin a sticky note
+bro todo record voiceover   # add a task; bro done 1 ticks it off
+bro city Mumbai             # weather location
+bro appearance dark         # light | dark | auto
+bro pet bird                # cat | bird | off
+bro fx snow                 # desktop weather: auto | off | rain | snow | storm
+bro wrapped                 # this week's summary
+bro autostart on            # start when you sign in
+bro help                    # everything else
 ```
 
 ## Settings and data
@@ -85,11 +110,23 @@ brow help                    # everything else
 Everything is in `~/.mirage/` (`config.json`, song history, screen time). It never leaves your PC,
 except weather, quotes and GitHub contributions, which are fetched from public APIs.
 
+## Updating
+
+Mirage checks GitHub every few minutes. When there's a new version, an **Update ready** pill shows
+at the top of the desktop; click **Install** and it restarts on the new version. You can also run
+`git pull` yourself.
+
+Publishing an update: edit `release.json` (version, title, a few short notes) and push. That text is
+what people see in the update notice; a push that leaves it alone shows "Bug fixes and improvements".
+
 ## Troubleshooting
 
-- **Wallpaper is blank:** run `brow restart`.
-- **Commit graph is empty:** `brow github <your-username>` or `brow repo scan <projects-folder>`.
+- **Wallpaper is blank:** run `bro restart`.
+- **Commit graph is empty:** `bro github <your-username>` or `bro repo scan <projects-folder>`.
 - **AI says Ollama is missing:** install it from ollama.com, then `ollama pull llama3.1:8b`.
+- More fixes for each system: [Windows guide](docs/SETUP-WINDOWS.md#troubleshooting), [Linux guide](docs/SETUP-LINUX.md#troubleshooting).
+
+Logo files are built from `assets/logo-source.png` with `npm run icon`.
 
 ## Credits
 

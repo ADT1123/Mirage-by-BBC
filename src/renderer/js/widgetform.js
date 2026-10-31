@@ -50,9 +50,25 @@ export const FONTS = {
 };
 const NO_FONT = new Set(['menubar', 'dock', 'stack', 'music', 'commits', 'art', 'photo', 'memories']);
 
+// clock looks, each with a tiny preview of 09:41 drawn in that look
+const CLOCK_LOOKS = [
+  ['classic', 'Classic', '09:41'],
+  ['minimal', 'Minimal', '09:41'],
+  ['stacked', 'Stacked', '09<br>41'],
+  ['analog', 'Analog', ''],
+  ['flip', 'Flip', '<i>09</i><i>41</i>'],
+  ['duo', 'Duo', '09<b>41</b>'],
+  ['glow', 'Glow', '09:41'],
+  ['words', 'Words', 'twenty to<br>ten'],
+];
+
 const OPTIONS = {
   clock: [
-    ['variant', 'Look', 'seg', [['classic', 'Classic'], ['analog', 'Analog'], ['stacked', 'Stacked'], ['minimal', 'Minimal']]],
+    ['variant', 'Clock style', 'looks', CLOCK_LOOKS],
+    ['textAlign', 'Line up', 'seg', [['', 'Theme'], ['left', 'Left'], ['center', 'Center'], ['right', 'Right']], ''],
+    ['zero', 'Leading zero (01:05)', 'toggle', true],
+    ['seconds', 'Seconds', 'toggle', false],
+    ['ampm', 'AM / PM', 'toggle', true],
     ['showDate', 'Date', 'toggle', true],
     ['showGreeting', 'Greeting', 'toggle', true],
   ],
@@ -82,8 +98,11 @@ const weightName = (v) => WEIGHT_NAMES[Math.round(v / 100) * 100] || '';
 const CORNERS = [['', 'Theme'], ['round', 'Round'], ['soft', 'Soft'], ['square', 'Square']];
 let lastTab = { id: '', tab: 'look' }; // the open tab survives re-renders of the same widget
 
+// what "Reset style" clears, back to how the theme draws the widget
+const STYLE_KEYS = ['style', 'tint', 'accent', 'textColor', 'font', 'weight', 'corners', 'opacity', 'shadow', 'scale'];
+
 // Edit Widget, iPhone-customization style: Look / Font / Options tabs, live previews.
-export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
+export function renderWidgetForm(root, w, info, onChange, onRemove, onResize, onClose) {
   const meta = info.widgets.find((x) => x.type === w.type) || { name: w.type };
   const opt = (key, def) => (w[key] === undefined ? def : w[key]);
   const styled = !NO_STYLE.has(w.type);
@@ -101,12 +120,21 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
   };
   const row = (label, control, cls = '') => `<div class="wg-row ${cls}"><span>${label}</span>${control}</div>`;
 
+  const looks = (key, choices) =>
+    `<div class="wg-looks">${choices
+      .map(([v, label, sample]) => `<button data-k="${key}" data-v="${v}" class="${opt(key, choices[0][0]) === v ? 'on' : ''}"><span class="wg-ck ck-${v}">${v === 'analog' ? icon('clock') : sample}</span>${label}</button>`)
+      .join('')}</div>`;
+  // only the options that mean something for the chosen clock look
+  const unused = w.type === 'clock' ? { analog: ['textAlign', 'zero', 'seconds', 'ampm', 'showGreeting'], words: ['zero', 'seconds', 'ampm'] }[w.variant] || [] : [];
   const fields = (OPTIONS[w.type] || [])
+    .filter(([key]) => !unused.includes(key))
     .map(([key, label, kind, extra, def]) =>
-      kind === 'list'
-        ? row(label, `<input class="wg-input" data-list="${key}" value="${esc((w[key] || []).join(', '))}" placeholder="${esc(extra)}" spellcheck="false" /><small class="wg-hint">Yahoo Finance symbols, comma separated. Indian stocks end in .NS</small>`, 'stack')
+      kind === 'looks'
+        ? row(label, looks(key, extra), 'col')
+        : kind === 'list'
+        ? row(label, `<input class="wg-input" data-list="${key}" value="${esc((w[key] || []).join(', '))}" placeholder="${esc(extra)}" spellcheck="false" /><small class="wg-hint">Yahoo Finance symbols, comma separated. Indian stocks end in .NS</small>`, 'col')
         : kind === 'seg'
-        ? row(label, seg(key, extra, def ?? extra[w.type === 'note' ? 1 : w.type === 'commits' || w.type === 'year' ? extra.length - 1 : 0][0]), 'stack')
+        ? row(label, seg(key, extra, def ?? extra[w.type === 'note' ? 1 : w.type === 'commits' || w.type === 'year' ? extra.length - 1 : 0][0]), 'col')
         : row(label, sw(key, extra)),
     )
     .join('');
@@ -128,8 +156,10 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
            .join('')}</div>`
       : '';
 
-  const tabs = [['look', 'Look'], ...(hasFont ? [['font', 'Font']] : []), ...(fields || stackItems || w.type === 'photo' || w.type === 'sticker' ? [['options', w.type === 'stack' ? 'Stack' : w.type === 'photo' ? 'Photos' : 'Options']] : [])];
-  if (lastTab.id !== w.id) lastTab = { id: w.id, tab: 'look' };
+  // a clock opens on its own tab (style, seconds, 01 or 1), the thing people change most
+  const optTab = fields || stackItems || w.type === 'photo' || w.type === 'sticker' ? [['options', { stack: 'Stack', photo: 'Photos', clock: 'Clock' }[w.type] || 'Options']] : [];
+  const tabs = w.type === 'clock' ? [...optTab, ['look', 'Look'], ['font', 'Font']] : [['look', 'Look'], ...(hasFont ? [['font', 'Font']] : []), ...optTab];
+  if (lastTab.id !== w.id) lastTab = { id: w.id, tab: tabs[0][0] };
   if (!tabs.some(([k]) => k === lastTab.tab)) lastTab.tab = 'look';
   const tab = lastTab.tab;
 
@@ -170,8 +200,9 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
              .join('')}${custom('textColor')}</div>`
         : ''
     }
-    <div class="wg-label">Scale</div>
-    <div class="wg-seg">${SIZES.map(([l, s]) => `<button data-size="${s}" class="${Math.abs((w.scale || 1) - s) < 0.06 ? 'on' : ''}">${{ S: 'Small', M: 'Medium', L: 'Large' }[l]}</button>`).join('')}</div>
+    <div class="wg-label">Size</div>
+    <div class="wg-seg">${SIZES.map(([l, s]) => `<button data-size="${s}" class="${Math.abs((w.scale || 1) - s) < 0.03 ? 'on' : ''}">${{ S: 'Small', M: 'Medium', L: 'Large' }[l]}</button>`).join('')}</div>
+    <div class="wg-card">${row('Custom', `<span class="wg-slide"><input type="range" min="0.5" max="2" step="0.05" data-range="scale" value="${w.scale || 1}" /><em data-out="scale">${Math.round((w.scale || 1) * 100)}%</em></span>`, 'slider-row')}</div>
     ${
       styled
         ? `<div class="wg-label">Corners</div>
@@ -189,7 +220,7 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
     const range = f ? f.weights : FONTS.classic.weights;
     const weight = w.weight || (w.type === 'clock' ? 250 : 500);
     const now = new Date();
-    const sample = w.type === 'clock' ? now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '') : 'Aa Bb 123';
+    const sample = w.type === 'clock' ? now.toLocaleTimeString([], { hour: w.zero === false ? 'numeric' : '2-digit', minute: '2-digit' }).replace(/\s?[AP]M$/i, '') : 'Aa Bb 123';
     return `
       <div class="wg-preview" style="font-family:${(f || FONTS.classic).family.replace(/"/g, '&quot;')};${range ? `font-weight:${weight}` : ''}">${esc(sample)}</div>
       <div class="wg-fonts">
@@ -225,13 +256,19 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
 
   root.innerHTML = `
     <div class="wg">
-      <div class="wg-head"><div><b>${esc(meta.name)}</b><small>Customize widget</small></div></div>
+      <div class="wg-head">
+        <div><b>${esc(meta.name)}</b><small>Changes save as you go</small></div>
+        ${onClose ? `<button class="wg-close" data-close title="Close (Esc)" aria-label="Close">${icon('x')}</button>` : ''}
+      </div>
       ${tabs.length > 1 ? `<div class="wg-tabs">${tabs.map(([k, label]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}</button>`).join('')}</div>` : ''}
       <div class="wg-body">${tab === 'font' ? font() : tab === 'options' ? options() : look()}</div>
-      ${onRemove ? `<button class="wg-remove" data-remove>${icon('trash')}Remove widget</button>` : ''}
+      <div class="wg-foot">
+        ${styled || hasFont ? `<button class="wg-reset" data-reset title="Back to how the theme draws it">${icon('reset')}Reset style</button>` : ''}
+        ${onRemove ? `<button class="wg-remove" data-remove>${icon('trash')}Remove</button>` : ''}
+      </div>
     </div>`;
 
-  const rerender = () => renderWidgetForm(root, w, info, onChange, onRemove, onResize);
+  const rerender = () => renderWidgetForm(root, w, info, onChange, onRemove, onResize, onClose);
 
   // text lists (e.g. the stock watchlist) save when you leave the field or press Enter
   root.onchange = (e) => {
@@ -311,6 +348,8 @@ export function renderWidgetForm(root, w, info, onChange, onRemove, onResize) {
       [w.items[i], w.items[j]] = [w.items[j], w.items[i]];
     }
     if (b.dataset.remove !== undefined) return onRemove?.();
+    if (b.dataset.close !== undefined) return onClose?.();
+    if (b.dataset.reset !== undefined) for (const k of STYLE_KEYS) delete w[k];
     onChange();
     rerender();
     onResize?.();

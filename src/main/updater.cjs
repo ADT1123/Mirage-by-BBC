@@ -9,7 +9,11 @@ const { execFile } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..');
 const EVERY = 5 * 60 * 1000; // a git fetch is tiny; new versions show up within 5 minutes
 
-let status = { available: false, behind: 0, changes: [], checked: 0, error: null };
+// What users see comes from release.json (version, title, a few notes), never from commit
+// messages. A push that leaves release.json alone shows the generic line below.
+const GENERIC = { version: '', title: 'Bug fixes and improvements', notes: [] };
+
+let status = { available: false, behind: 0, release: GENERIC, checked: 0, error: null };
 let listeners = [];
 let busy = false;
 
@@ -27,14 +31,30 @@ function npmInstall() {
 
 const isRepo = () => fs.existsSync(path.join(ROOT, '.git'));
 
+async function releaseAt(ref) {
+  const r = await git(['show', `${ref}:release.json`]);
+  try {
+    return r.ok ? JSON.parse(r.out) : null;
+  } catch {
+    return null;
+  }
+}
+
+// the incoming release.json, if the push changed it
+async function incoming() {
+  const [next, cur] = await Promise.all([releaseAt('@{u}'), releaseAt('HEAD')]);
+  if (!next?.title || JSON.stringify(next) === JSON.stringify(cur)) return GENERIC;
+  return { version: String(next.version || ''), title: String(next.title), notes: Array.isArray(next.notes) ? next.notes.map(String).slice(0, 6) : [] };
+}
+
 async function check() {
   if (!isRepo()) return (status = { ...status, error: 'not-a-clone', checked: Date.now() });
   const fetched = await git(['fetch', '--quiet']);
   if (!fetched.ok) return (status = { ...status, error: 'offline', checked: Date.now() });
   const behind = Number((await git(['rev-list', '--count', 'HEAD..@{u}'])).out) || 0;
-  const log = behind ? (await git(['log', '--format=%s', '-n', '8', 'HEAD..@{u}'])).out.split('\n').filter(Boolean) : [];
+  const release = behind ? await incoming() : GENERIC;
   const was = status.behind;
-  status = { available: behind > 0, behind, changes: log, checked: Date.now(), error: null };
+  status = { available: behind > 0, behind, release, checked: Date.now(), error: null };
   if (behind > was) for (const fn of listeners) fn(status); // every new push, not just the first
   return status;
 }
@@ -57,7 +77,7 @@ async function apply() {
     if (changed.some((f) => f === 'package.json' || f === 'package-lock.json') && !(await npmInstall())) {
       return { ok: false, reason: 'Downloaded, but installing new parts failed. Run npm install' };
     }
-    status = { available: false, behind: 0, changes: [], checked: Date.now(), error: null };
+    status = { available: false, behind: 0, release: GENERIC, checked: Date.now(), error: null };
     return { ok: true, from: before.slice(0, 7), to: after.slice(0, 7) };
   } finally {
     busy = false;

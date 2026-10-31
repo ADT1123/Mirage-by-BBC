@@ -4,7 +4,7 @@
   "description": "Mirage: a live, usable desktop wallpaper with widgets, 17 themes, Spotlight, a local AI and a CLI.",
   "main": "src/main/main.cjs",
   "bin": {
-    "brow": "cli/main.mjs"
+    "bro": "cli/main.mjs"
   },
   "scripts": {
     "start": "node cli/main.mjs start",

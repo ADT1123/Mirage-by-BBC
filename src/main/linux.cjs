@@ -290,7 +290,7 @@ function editor() {
 
 // ---------------------------------------------------------------- keyboard shortcuts (GNOME)
 // On Wayland, apps can't grab global keys, so we add two GNOME custom shortcuts that run the
-// CLI instead. Only done when you run `brow shortcuts`; nothing else is touched.
+// CLI instead. Only done when you run `bro shortcuts`; nothing else is touched.
 
 const MK = 'org.gnome.settings-daemon.plugins.media-keys';
 const KB_PATH = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/';
@@ -326,8 +326,20 @@ function setAutostart(on, electronPath, appRoot) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     file,
-    `[Desktop Entry]\nType=Application\nName=Mirage\nComment=Live desktop wallpaper\nExec="${electronPath}" "${appRoot}"\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n`,
+    `[Desktop Entry]\nType=Application\nName=Mirage\nComment=Live desktop wallpaper\nExec="${electronPath}" "${appRoot}"\nIcon=${path.join(appRoot, 'assets', 'icon.png')}\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n`,
   );
+}
+
+// an app-menu entry with the Mirage logo (opening it while running shows the editor)
+function setLauncher(electronPath, appRoot) {
+  const dir = path.join(HOME, '.local', 'share', 'applications');
+  const file = path.join(dir, 'mirage.desktop');
+  const body = `[Desktop Entry]\nType=Application\nName=Mirage\nComment=Live desktop wallpaper\nExec="${electronPath}" "${appRoot}"\nIcon=${path.join(appRoot, 'assets', 'icon.png')}\nCategories=Utility;\nTerminal=false\n`;
+  try {
+    if (fs.readFileSync(file, 'utf8') === body) return;
+  } catch {}
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, body);
 }
 
 // ---------------------------------------------------------------- media (MPRIS over D-Bus)
@@ -464,6 +476,7 @@ module.exports = {
   defaultDock,
   editor,
   setAutostart,
+  setLauncher,
   installShortcuts,
   mediaState,
   mediaCommand,

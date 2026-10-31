@@ -96,6 +96,7 @@ function ensurePopup() {
   if (popup && !popup.isDestroyed()) return popup;
   popupReady = false;
   popup = new BrowserWindow({
+    icon: path.join(__dirname, '..', '..', 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     width: 360,
     height: 400,
     show: false,

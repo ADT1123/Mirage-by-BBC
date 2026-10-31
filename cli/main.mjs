@@ -1,51 +1,73 @@
 #!/usr/bin/env node
 // CLI entry: no arguments opens the interactive shell; `<command> [args]` runs one command.
 
-import { COMMANDS, THEMES, WIDGETS, brand, config, executeWords } from './commands.mjs';
+import { COMMANDS, brand, executeWords, find } from './commands.mjs';
+import { banner, canColor } from './mark.mjs';
 
 const cli = brand.command;
-const tty = process.stdout.isTTY;
-const paint = (code, s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : s);
+const color = canColor();
+const paint = (code, s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
 const green = (s) => paint('32', s);
 const red = (s) => paint('31', s);
 const dim = (s) => paint('2', s);
 const bold = (s) => paint('1', s);
 
+// Results speak the interactive shell's language ("/start"); here you type "bro start".
+const NAMES = COMMANDS.flatMap((c) => [c.name, ...(c.aliases || []).filter((a) => /^\w+$/.test(a))]);
+const SLASH = new RegExp(`(^|[\\s(“"'])/(${NAMES.join('|')})(?=$|[\\s,.:)”"'])`, 'g');
+const speak = (s) => String(s ?? '').replace(SLASH, `$1${cli} $2`);
+
+// Grouped lists: every cell but the last is padded into a column, the last one is dimmed.
+function printSections(sections) {
+  for (const sec of sections) {
+    console.log(`\n  ${bold(speak(sec.title))}${sec.note ? `  ${dim(speak(sec.note))}` : ''}`);
+    const widths = [];
+    for (const row of sec.rows) row.slice(0, -1).forEach((cell, i) => (widths[i] = Math.max(widths[i] || 0, [...cell].length)));
+    for (const row of sec.rows) {
+      const cells = row.slice(0, -1).map((cell, i) => cell + ' '.repeat(widths[i] - [...cell].length));
+      console.log(`    ${cells.join('  ')}  ${dim(speak(row[row.length - 1]))}`.trimEnd());
+    }
+    if (sec.foot) console.log(`    ${dim(speak(sec.foot))}`);
+  }
+  console.log('');
+}
+
 function print(res) {
   if (!res) return;
-  console.log(`${res.ok ? green('⏺') : red('⏺')} ${bold(res.title)}`);
-  (res.lines || []).forEach((l, i) => console.log(dim(`${i === 0 ? '  ⎿  ' : '     '}${l}`)));
-  if (res.hint) console.log(dim(`${res.lines?.length ? '     ' : '  ⎿  '}${res.hint}`));
+  console.log(`${res.ok ? green('⏺') : red('⏺')} ${bold(speak(res.title))}`);
+  (res.lines || []).forEach((l, i) => console.log(dim(`${i === 0 ? '  ⎿  ' : '     '}${speak(l)}`)));
+  if (res.sections) printSections(res.sections);
+  if (res.hint) console.log(dim(`${res.lines?.length && !res.sections ? '     ' : '  ⎿  '}${speak(res.hint)}`));
+}
+
+const showBanner = () => console.log(`\n${banner().join('\n')}\n`);
+
+function help() {
+  showBanner();
+  console.log(`  ${bold(cli.padEnd(24))}${dim('open the interactive shell (type / for commands)')}`);
+  console.log(`  ${bold(`${cli} <command> [args]`.padEnd(24))}${dim(`run one command, e.g. ${cli} wall koi pond`)}`);
+  return executeWords(['help']).then(print);
 }
 
 const args = process.argv.slice(2);
 
-if (args[0] === '--help' || args[0] === '-h') {
-  console.log(`${bold(cli)} ${dim(`· ${brand.name}${brand.tagline ? `, ${brand.tagline}` : ''}`)}\n`);
-  console.log(`  ${bold(cli.padEnd(20))} open the interactive shell`);
-  console.log(`  ${bold(`${cli} <command>`.padEnd(20))} run one command, e.g. ${dim(`${cli} theme synthwave`)}\n`);
-  for (const c of COMMANDS) {
-    const left = `${c.name} ${c.args || ''}`;
-    if (left.length > 26) console.log(`  ${left}\n  ${''.padEnd(28)}${dim(c.desc)}`);
-    else console.log(`  ${left.padEnd(28)}${dim(c.desc)}`);
-  }
+if (['--help', '-h', 'help', '?'].includes(args[0]) && args.length === 1) {
+  await help();
   process.exit(0);
 }
 
 if (args.length) {
+  if (find(args[0])?.name === 'start') showBanner();
   const res = await executeWords(args);
-  if (res?.ui === 'theme-picker') {
-    const cur = config.load().theme;
-    print({ ok: true, title: `${THEMES.length} themes`, lines: THEMES.map((t) => `${t.id === cur ? '●' : '○'} ${t.id.padEnd(10)} ${t.tagline}`), hint: `${cli} theme <name>` });
-  } else if (res?.ui === 'widget-picker') {
-    const on = new Set(config.load().widgets.map((w) => w.type));
-    print({ ok: true, title: 'Widgets', lines: WIDGETS.map((w) => `${on.has(w.type) ? '◉' : '○'} ${w.type.padEnd(10)} ${w.desc}`), hint: `${cli} add <widget> · ${cli} remove <widget>` });
-  } else if (res?.ui !== 'exit') {
-    print(res);
-  }
+  if (res?.ui === 'theme-picker') print(await executeWords(['themes']));
+  else if (res?.ui === 'widget-picker') print(await executeWords(['widgets', 'list']));
+  else if (res?.ui === 'wall-picker') print(await executeWords(['walls']));
+  else if (res?.ui === 'exit') print({ ok: true, title: `Nothing to leave: ${cli} ${args[0]} is for the interactive shell`, lines: [`${brand.name} keeps running. To take it off your desktop, run /stop`] });
+  else print(res);
   process.exit(res && !res.ok ? 1 : 0);
-} else if (!process.stdin.isTTY) {
-  console.log(`${cli} needs an interactive terminal. Try \`${cli} --help\`.`);
+} else if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  showBanner();
+  console.log(`${cli} needs an interactive terminal for its shell. Run one command instead, e.g. \`${cli} status\`, or see \`${cli} help\`.`);
 } else {
   const { startUI } = await import('./ui.mjs');
   startUI();

@@ -592,6 +592,7 @@ function widgetEdit(root, id) {
       close();
     },
     fit,
+    close,
   );
 }
 
@@ -720,7 +721,7 @@ function settings(root) {
           ${sw('visualizer', 'Music visualizer', cfg.visualizer !== false)}
           ${sw('clock24', '24-hour clock', !!cfg.clock24)}
           ${sw('taskbar', 'Hide taskbar', !!taskbar)}
-          ${sw('autostart', 'Start with Windows', !!cfg.autostart)}
+          ${sw('autostart', 'Start when I sign in', !!cfg.autostart)}
         </div>
 
         <div class="sm-card">
@@ -1061,7 +1062,7 @@ function projectsView(root) {
           </button>`,
             )
             .join('')
-        : '<div class="wx-loading">No projects found. Add a folder with: brow repo scan &lt;folder&gt;</div>';
+        : '<div class="wx-loading">No projects found. Add a folder with: bro repo scan &lt;folder&gt;</div>';
       fit();
     };
     const open = (i, reveal) => shown[i] && window.wall.action(reveal ? 'reveal' : 'repo', shown[i].path);
@@ -1176,10 +1177,10 @@ function updateView(root) {
   const paint = (s) => {
     if (s.available) {
       panel.innerHTML = `
-        <div class="up-ic">${icon('refresh')}</div>
-        <b>Update available</b>
-        <small>${s.behind} new change${s.behind === 1 ? '' : 's'} from the ${esc(info.brand?.name || '')} repo</small>
-        ${s.changes.length ? `<ul class="up-list">${s.changes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+        <div class="up-ic">${icon('download')}</div>
+        <b>${esc(info.brand?.name || '')}${s.release.version ? ` ${esc(s.release.version)}` : ''} is available</b>
+        <small>${esc(s.release.title)}</small>
+        ${s.release.notes.length ? `<ul class="up-list">${s.release.notes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
         <div class="up-btns"><button class="wr-btn primary" data-go>Update now</button><button class="wr-btn" data-later>Later</button></div>
         <small class="up-msg" data-k="msg"></small>`;
     } else {

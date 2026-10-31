@@ -33,7 +33,8 @@ export async function start() {
   const s = await status();
   if (s) return { already: true, status: s };
 
-  const electron = require('electron');
+  // Windows: launch Mirage.exe (Electron with Mirage's name and logo) so Task Manager says Mirage
+  const electron = require('../src/main/exe-brand.cjs').brandedExe(require('electron'));
   fs.mkdirSync(config.DIR, { recursive: true });
   const log = fs.openSync(path.join(config.DIR, 'app.log'), 'a');
   const env = { ...process.env };

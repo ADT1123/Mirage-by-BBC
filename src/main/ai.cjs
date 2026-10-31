@@ -188,7 +188,7 @@ async function ask(question, extra = {}, history = [], hooks = {}) {
     }
   } catch (e) {
     if (e.status === 404) return { ok: false, reply: `The model "${model}" isn't downloaded yet. Run: ollama pull ${model}` };
-    if (e.name === 'AbortError') return { ok: false, reply: 'The model took too long. Try a smaller one: brow ai model llama3.2:1b' };
+    if (e.name === 'AbortError') return { ok: false, reply: 'The model took too long. Try a smaller one: bro ai model llama3.2:1b' };
     if (e instanceof SyntaxError) return { ok: false, reply: 'The model sent back something unreadable. Try again.' };
     return { ok: false, reply: `The local model failed: ${e.message}` };
   }

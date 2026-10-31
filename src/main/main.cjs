@@ -29,6 +29,17 @@ const { Notification } = require('electron');
 const ROOT = path.join(__dirname, '..', '..');
 const PAGE = path.join(ROOT, 'src', 'renderer', 'index.html');
 const ICON = path.join(ROOT, 'assets', 'tray.png');
+const APP_ICON = path.join(ROOT, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+const AUMID = `com.${brand.slug}.app`;
+
+// Show up as Mirage (taskbar, notifications, volume mixer), not "Electron". The data folder
+// stays where it was before the name changed, so nothing saved is lost.
+{
+  const data = app.getPath('userData');
+  app.setName(brand.name);
+  app.setPath('userData', data);
+  if (process.platform === 'win32') app.setAppUserModelId(AUMID);
+}
 
 // Chromium would otherwise treat a window parented to the desktop as occluded and stop painting.
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
@@ -78,7 +89,30 @@ let spotlightKey = null; // the Spotlight shortcut that actually got registered
 let spot = null; // the Spotlight window (kept hidden between uses so it opens instantly)
 let player = null; // the full-screen Now Playing window (also kept warm)
 
+// Windows only shows an app's own name and icon on its notifications when a Start menu
+// shortcut carries the same app id, so keep one up to date (it also launches Mirage).
+// Linux gets a launcher entry with the logo.
+function registerApp() {
+  try {
+    if (process.platform === 'linux') return require('./linux.cjs').setLauncher(process.execPath, ROOT);
+    if (process.platform !== 'win32') return;
+    const { shell } = require('electron');
+    const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${brand.name}.lnk`);
+    const want = { target: process.execPath, args: `"${ROOT}"`, cwd: ROOT, icon: APP_ICON, iconIndex: 0, appUserModelId: AUMID, description: brand.tagline };
+    let have = null;
+    try {
+      have = shell.readShortcutLink(lnk);
+    } catch {}
+    if (!have || have.target !== want.target || have.args !== want.args || have.icon !== want.icon || have.appUserModelId !== want.appUserModelId) {
+      shell.writeShortcutLink(lnk, have ? 'replace' : 'create', want);
+    }
+  } catch (e) {
+    console.warn('[app] could not register the app shortcut:', e.message);
+  }
+}
+
 function boot() {
+  registerApp();
   cfg = config.ensure();
   lastJson = JSON.stringify(cfg);
   ipc.register({ onSave, closeEditor, hotkey: () => activeHotkey, spotlightKey: () => spotlightKey });
@@ -147,6 +181,7 @@ function buildWallpapers() {
   const primary = screen.getPrimaryDisplay();
   for (const d of screen.getAllDisplays()) {
     const win = new BrowserWindow({
+      icon: APP_ICON,
       ...d.bounds,
       show: false,
       frame: false,
@@ -220,6 +255,7 @@ function openEditor() {
   }
   const d = screen.getPrimaryDisplay();
   editor = new BrowserWindow({
+    icon: APP_ICON,
     ...d.bounds,
     show: false,
     frame: false,
@@ -277,13 +313,13 @@ function setupMedia() {
 function createPlayer() {
   if (player && !player.isDestroyed()) return player;
   player = new BrowserWindow({
+    icon: APP_ICON,
     show: false,
     frame: false,
     thickFrame: false, // no invisible resize border, so it covers the screen edge to edge
     skipTaskbar: false,
     backgroundColor: '#000000',
     title: 'Now Playing',
-    icon: path.join(ROOT, 'assets', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), backgroundThrottling: true },
   });
   logRenderer(player, 'player');
@@ -461,7 +497,8 @@ function setupUpdates() {
     sendAll('update:status', s);
     refreshTray();
     if (Notification.isSupported()) {
-      const n = new Notification({ title: `${brand.name} update available`, body: s.changes[0] ? `What's new: ${s.changes[0]}` : 'Click to update', icon: path.join(ROOT, 'assets', 'icon.png') });
+      const v = s.release.version ? ` ${s.release.version}` : '';
+      const n = new Notification({ title: `${brand.name}${v} is available`, body: s.release.title, icon: path.join(ROOT, 'assets', 'icon.png') });
       n.on('click', () => interact.action('update'));
       n.show();
     }
@@ -505,6 +542,7 @@ function testHotkey(accel, which) {
 function createSpotlight() {
   if (spot && !spot.isDestroyed()) return spot;
   spot = new BrowserWindow({
+    icon: APP_ICON,
     width: 720,
     height: 96,
     show: false,
@@ -656,7 +694,7 @@ function refreshTray() {
     { label: 'Spotlight search', accelerator: spotlightKey || undefined, click: showSpotlight },
     { label: 'Now Playing', click: openPlayer },
     { label: 'Weekly Wrapped', click: () => interact.action('wrapped') },
-    updater.status().available ? { label: `Update available (${updater.status().behind} new)…`, click: () => interact.action('update') } : { label: 'Check for updates', click: () => interact.action('update') },
+    updater.status().available ? { label: 'Update available…', click: () => interact.action('update') } : { label: 'Check for updates', click: () => interact.action('update') },
     {
       label: 'Wallpaper',
       submenu: PACKS.map((p) => ({

@@ -21,17 +21,19 @@
 
 .editing .w { cursor: grab; }
 .editing .w.dragging { cursor: grabbing; z-index: 4; transition: none; }
+/* a widget's size is a transform (--s), so everything the editor adds to it divides by --s
+   to stay the same size on screen however big or small the widget is */
 .editing .w::before {
   content: '';
   position: absolute;
-  inset: -0.6rem;
-  border-radius: 1.2rem;
-  border: 1.5px dashed rgba(255, 255, 255, 0);
+  inset: calc(-0.6rem / var(--s, 1));
+  border-radius: calc(1.2rem / var(--s, 1));
+  border: calc(1.5px / var(--s, 1)) dashed rgba(255, 255, 255, 0);
   transition: border-color 0.15s;
   pointer-events: none;
 }
 .editing .w:hover::before { border-color: rgba(255, 255, 255, 0.45); }
-.editing .w.sel::before { border: 2px solid var(--ui-accent); box-shadow: 0 0 0 4px rgba(76, 141, 255, 0.18); }
+.editing .w.sel::before { border: calc(2px / var(--s, 1)) solid var(--ui-accent); box-shadow: 0 0 0 calc(4px / var(--s, 1)) rgba(76, 141, 255, 0.18); }
 .editing .w-menubar::before { inset: 0; border-radius: 0; }
 .editing [data-edit] { cursor: text; border-radius: 0.3rem; transition: box-shadow 0.15s; }
 .editing [data-edit]:hover { box-shadow: 0 0 0 1px rgba(127, 127, 127, 0.45); }
@@ -42,8 +44,10 @@
 
 .w-tools {
   position: absolute;
-  right: -0.6rem;
-  top: -3rem;
+  right: calc(-0.6rem / var(--s, 1));
+  bottom: calc(100% + 0.9rem / var(--s, 1));
+  scale: calc(1 / var(--s, 1));
+  transform-origin: 100% 100%;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -80,12 +84,14 @@
 .w-tools .nc[data-color='green'] { background: #b8f0c4; }
 .w-tools .nc[data-color='purple'] { background: #d6c6ff; }
 .w-tools .ed-div { width: 1px; height: 1rem; background: var(--ui-line); margin: 0 0.15rem; }
-.w-menubar > .w-tools { top: 2.4rem; right: 1rem; }
+.w-menubar > .w-tools { top: 2.4rem; bottom: auto; right: 1rem; transform-origin: 100% 0; }
 
 .w-resize {
   position: absolute;
-  right: -1rem;
-  bottom: -1rem;
+  right: calc(-1rem / var(--s, 1));
+  bottom: calc(-1rem / var(--s, 1));
+  scale: calc(1 / var(--s, 1));
+  transform-origin: 0 0;
   width: 1.3rem;
   height: 1.3rem;
   border-radius: 50%;

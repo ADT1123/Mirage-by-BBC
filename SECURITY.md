@@ -12,7 +12,7 @@ Please don't open a public issue for security problems. Use GitHub's private rep
 - **The AI is local.** The Assistant runs through Ollama on your machine; nothing you type leaves it.
 - **Sandboxed windows.** Every Mirage window is sandboxed, can't open new windows, and can't
   navigate to websites. Links open in your normal browser.
-- **Local control only.** The `brow` command talks to Mirage over `127.0.0.1` only, and requests
+- **Local control only.** The `bro` command talks to Mirage over `127.0.0.1` only, and requests
   must carry a special header and a localhost address, so web pages can't reach it.
 - **Updates come only from this repository**, as fast-forward `git pull`s you approve with a click.
   They never overwrite files you changed.

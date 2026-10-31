@@ -280,6 +280,8 @@ export function createEditor(app) {
         removeWidget(id);
         open('widget');
       },
+      undefined,
+      () => open('widget'),
     );
   }
 

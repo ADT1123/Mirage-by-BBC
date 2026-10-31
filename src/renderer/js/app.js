@@ -151,7 +151,7 @@ function updatePill(s) {
     pill.querySelector('.up-x').addEventListener('click', () => ((laterAt = store.update?.behind || 0), pill.remove()));
     document.body.append(pill);
   }
-  pill.title = s.changes?.length ? `What's new:\n${s.changes.join('\n')}` : 'A new version is ready';
+  pill.title = s.release?.title || 'A new version is ready';
 }
 
 // your own accent for the whole theme (Settings), including the commit graph.
