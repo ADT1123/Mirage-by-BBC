@@ -190,7 +190,13 @@ export const COMMANDS = [
       if (r.started) return ok(`${brand.name} is live on your desktop`, [`Press ${key(r.status)} (or /edit) to drag things around`, 'Look for the tray icon to switch wallpapers or quit']);
       // show the reason here: a blank "it didn't start" means a trip to a log file nobody finds
       if (r.reason) return fail('It could not start', [r.reason, `Full log: ${r.log}`]);
-      return fail('It did not start in time', [...(r.tail?.length ? ['The end of the log:', ...r.tail] : []), `Full log: ${r.log}`]);
+      // the one Linux failure with a known fix: say what it is rather than leave it in the log
+      const sandbox = r.tail?.some((l) => /sandbox/i.test(l)) && process.platform === 'linux';
+      return fail('It did not start in time', [
+        ...(r.tail?.length ? ['The end of the log:', ...r.tail] : []),
+        ...(sandbox ? ['', "Electron's sandbox is blocked on this system. The fix is in docs/SETUP-LINUX.md, under \"The log mentions chrome-sandbox\"."] : []),
+        `Full log: ${r.log}`,
+      ]);
     },
   },
   {
